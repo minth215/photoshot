@@ -41,11 +41,21 @@
     border-bottom:1px solid var(--line);
     flex-shrink:0;
   }
+  .header-side{display:flex;align-items:center;}
+  .header-side-left{grid-column:1;justify-content:flex-start;}
+  .header-side-right{grid-column:3;justify-content:flex-end;gap:8px;}
   .header-actions{grid-column:2;display:flex;gap:8px;justify-content:center;}
   .header-close{grid-column:3;display:flex;justify-content:flex-end;}
   .iconbtn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
   .iconbtn svg{width:18px;height:18px;}
   .iconbtn.close-btn:hover:not(:disabled){background:rgba(226,114,91,.15);border-color:var(--danger);color:var(--danger);}
+  .menu-cancel,.menu-apply{display:none;}
+  body.editing-mode .header-actions,
+  body.editing-mode .header-close .iconbtn{display:none;}
+  body.editing-mode .menu-cancel,
+  body.editing-mode .menu-apply{display:inline-flex;}
+  body.editing-mode .header-close{grid-column:3;display:flex;justify-content:flex-end;}
+  .toggle-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
   button{
     font-family:var(--sans);
     cursor:pointer;
@@ -127,11 +137,6 @@
     padding:14px;
   }
   .toolrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
-  .subtabrow{display:flex;gap:6px;}
-  .subtabrow .subtab-btn{flex:1;}
-  .subtabrow .subtab-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
-  .subpanel{display:flex;flex-direction:column;gap:10px;}
-  .subpanel[hidden]{display:none;}
   .ratio-row{display:flex;gap:6px;flex-wrap:wrap;}
   .ratio-btn{flex:1 1 auto;padding:6px 8px;font-size:12px;}
   .ratio-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
@@ -172,6 +177,7 @@
   .hint{font-size:11px;color:var(--text-dim);line-height:1.5;margin:0;}
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .checkline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);}
+  .toggle-btn{width:100%;}
   #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;}
   footer{
     padding:8px 18px;border-top:1px solid var(--line);background:var(--panel);
@@ -208,6 +214,9 @@
       gap:2px;padding:4px 6px;
     }
     .mobile-tabbar::-webkit-scrollbar{height:3px;}
+    /* Only that menu's control bar should remain while editing — the tab bar
+       (used to pick a menu in the first place) disappears until Apply/Cancel. */
+    body.editing-mode .mobile-tabbar{display:none;}
 
     /* Panels take up real space (pushing/shrinking the image area above) instead
        of floating over the image, so opening a taller panel visibly shrinks the
@@ -230,6 +239,9 @@
 
 <header>
   <input type="file" id="fileInput" accept="image/*">
+  <div class="header-side header-side-left">
+    <button id="menuCancelBtn" class="menu-cancel" type="button">취소</button>
+  </div>
   <div class="header-actions">
     <button id="undoBtn" class="iconbtn" disabled type="button" title="실행 취소" aria-label="실행 취소">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
@@ -241,10 +253,11 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
-  <div class="header-close">
+  <div class="header-close header-side-right">
     <button id="closeBtn" class="iconbtn close-btn" disabled type="button" title="닫기" aria-label="닫기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
     </button>
+    <button id="menuApplyBtn" class="menu-apply primary" type="button">적용</button>
   </div>
 </header>
 
@@ -281,9 +294,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
         <span>선택영역</span>
       </button>
-      <button class="tab-btn" type="button" data-target="group-canvas">
+      <button class="tab-btn" type="button" data-target="group-crop">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
-        <span>캔버스</span>
+        <span>크롭</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-resize">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        <span>사이즈 조절</span>
       </button>
       <button class="tab-btn" type="button" data-target="group-effects">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>
@@ -303,7 +320,7 @@
       </button>
     </nav>
 
-    <details class="group" id="group-selection" open>
+    <details class="group collapsed" id="group-selection" open>
       <summary>선택 영역</summary>
       <div class="group-body">
         <p class="hint">올가미·브러쉬로 그린 영역에만 아래 보정이 적용돼요. 아무 선택도 없으면 이미지 전체에 적용됩니다.</p>
@@ -335,51 +352,39 @@
       </div>
     </details>
 
-    <details class="group collapsed" id="group-canvas" open>
-      <summary>캔버스 (크롭 / 사이즈)</summary>
+    <details class="group collapsed" id="group-crop" open>
+      <summary>크롭</summary>
       <div class="group-body">
-        <div class="subtabrow">
-          <button class="subtab-btn active" type="button" data-subtab="canvas-crop">크롭</button>
-          <button class="subtab-btn" type="button" data-subtab="canvas-resize">크기 조절</button>
+        <p class="hint">비율을 고르고 모서리·가장자리 바를 끌어 크롭 영역을 조절하세요. 두 손가락으로 이미지를 돌리거나 아래 눈금으로 회전할 수 있어요.</p>
+        <div class="ratio-row">
+          <button class="ratio-btn active" type="button" data-ratio="free">자유</button>
+          <button class="ratio-btn" type="button" data-ratio="1:1">정사각형</button>
+          <button class="ratio-btn" type="button" data-ratio="3:4">3:4</button>
+          <button class="ratio-btn" type="button" data-ratio="3:2">3:2</button>
+          <button class="ratio-btn" type="button" data-ratio="16:9">16:9</button>
         </div>
+        <div class="rotate-wrap">
+          <div class="rotate-value" id="rotateValue">0°</div>
+          <div class="rotate-ruler" id="rotateRuler">
+            <div class="rotate-ruler-track" id="rotateRulerTrack"></div>
+            <div class="rotate-ruler-needle"></div>
+          </div>
+        </div>
+      </div>
+    </details>
 
-        <div class="subpanel" id="canvas-crop">
-          <p class="hint">비율을 고르고 모서리·가장자리 바를 끌어 크롭 영역을 조절하세요. 두 손가락으로 이미지를 돌리거나 아래 눈금으로 회전할 수 있어요.</p>
-          <div class="ratio-row">
-            <button class="ratio-btn active" type="button" data-ratio="free">자유</button>
-            <button class="ratio-btn" type="button" data-ratio="1:1">정사각형</button>
-            <button class="ratio-btn" type="button" data-ratio="3:4">3:4</button>
-            <button class="ratio-btn" type="button" data-ratio="3:2">3:2</button>
-            <button class="ratio-btn" type="button" data-ratio="16:9">16:9</button>
-          </div>
-          <div class="rotate-wrap">
-            <div class="rotate-value" id="rotateValue">0°</div>
-            <div class="rotate-ruler" id="rotateRuler">
-              <div class="rotate-ruler-track" id="rotateRulerTrack"></div>
-              <div class="rotate-ruler-needle"></div>
-            </div>
-          </div>
-          <div class="btnrow">
-            <button class="primary" id="applyCropBtn">크롭 적용</button>
-            <button class="ghost" id="cancelCropBtn">취소</button>
-          </div>
+    <details class="group collapsed" id="group-resize" open>
+      <summary>사이즈 조절</summary>
+      <div class="group-body">
+        <div class="two-col">
+          <label class="field"><span class="row"><span>너비(px)</span></span>
+            <input type="number" id="resizeW" min="1">
+          </label>
+          <label class="field"><span class="row"><span>높이(px)</span></span>
+            <input type="number" id="resizeH" min="1">
+          </label>
         </div>
-
-        <div class="subpanel" id="canvas-resize" hidden>
-          <div class="two-col">
-            <label class="field"><span class="row"><span>너비(px)</span></span>
-              <input type="number" id="resizeW" min="1">
-            </label>
-            <label class="field"><span class="row"><span>높이(px)</span></span>
-              <input type="number" id="resizeH" min="1">
-            </label>
-          </div>
-          <div class="checkline">
-            <input type="checkbox" id="lockAspect" checked>
-            <label for="lockAspect">가로세로 비율 고정</label>
-          </div>
-          <button id="applyResizeBtn">사이즈 적용</button>
-        </div>
+        <button type="button" id="lockAspectToggle" class="toggle-btn active" aria-pressed="true">가로세로 비율 고정</button>
       </div>
     </details>
 
@@ -394,10 +399,6 @@
           <span class="row"><span>노이즈 추가</span><span id="noiseVal">0</span></span>
           <input type="range" id="noiseRange" min="0" max="100" value="0">
         </label>
-        <div class="btnrow">
-          <button class="primary" id="applyEffectsBtn">적용</button>
-          <button class="ghost" id="cancelEffectsBtn">취소</button>
-        </div>
       </div>
     </details>
 
@@ -426,10 +427,6 @@
           <span class="row"><span>옐로우 ↔ 블루</span><span id="scYBVal">0</span></span>
           <input type="range" id="scYB" min="-100" max="100" value="0">
         </label>
-        <div class="btnrow">
-          <button class="primary" id="applySCBtn">적용</button>
-          <button class="ghost" id="cancelSCBtn">취소</button>
-        </div>
       </div>
     </details>
 
@@ -446,10 +443,6 @@
           <input type="range" id="lvOutB" min="0" max="254" value="0"></label>
         <label class="field"><span class="row"><span>출력 최대값</span><span id="lvOutWVal">255</span></span>
           <input type="range" id="lvOutW" min="1" max="255" value="255"></label>
-        <div class="btnrow">
-          <button class="primary" id="applyLevelsBtn">적용</button>
-          <button class="ghost" id="cancelLevelsBtn">취소</button>
-        </div>
       </div>
     </details>
 
@@ -460,10 +453,6 @@
         <p class="hint">그래프를 클릭해 포인트를 추가하고 드래그하세요. 포인트를 더블클릭하면 삭제됩니다.</p>
         <div class="btnrow">
           <button id="resetCurveBtn" class="ghost">곡선 초기화</button>
-        </div>
-        <div class="btnrow">
-          <button class="primary" id="applyCurveBtn">적용</button>
-          <button class="ghost" id="cancelCurveBtn">취소</button>
         </div>
       </div>
     </details>
@@ -493,6 +482,8 @@
   const resetBtn = document.getElementById('resetBtn');
   const closeBtn = document.getElementById('closeBtn');
   const mobileTabBar = document.getElementById('mobileTabBar');
+  const menuCancelBtn = document.getElementById('menuCancelBtn');
+  const menuApplyBtn = document.getElementById('menuApplyBtn');
 
   function updateHistoryButtons(){
     const hasHistory = undoStack.length>0;
@@ -599,8 +590,7 @@
       downloadBtn.disabled=false;
       closeBtn.disabled=false;
       updateHistoryButtons();
-      document.getElementById('resizeW').value=w;
-      document.getElementById('resizeH').value=h;
+      syncResizeInputs();
       updateDims();
       renderSelectionOverlay();
       URL.revokeObjectURL(url);
@@ -663,9 +653,9 @@
     cropRect=null; cropRatio=null; cropRotationDeg=0;
     document.querySelectorAll('.ratio-btn').forEach(b=> b.classList.toggle('active', b.dataset.ratio==='free'));
     updateRulerUI();
-    document.querySelectorAll('.subtab-btn').forEach(b=> b.classList.toggle('active', b.dataset.subtab==='canvas-crop'));
-    document.getElementById('canvas-crop').hidden=false;
-    document.getElementById('canvas-resize').hidden=true;
+    lockAspectOn = true;
+    lockAspectToggle.classList.add('active');
+    lockAspectToggle.setAttribute('aria-pressed','true');
     updateHistoryButtons();
     downloadBtn.disabled=true;
     closeBtn.disabled=true;
@@ -685,6 +675,9 @@
       mobileTabBar.querySelectorAll('.tab-btn.active').forEach(b=>b.classList.remove('active'));
       sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
     }
+    activeMenuId = null;
+    document.body.classList.remove('editing-mode');
+    document.querySelectorAll('aside#sidePanel > .group').forEach(g=> g.classList.add('collapsed'));
   }
   closeBtn.addEventListener('click', ()=>{
     if(window.confirm('진행 상황은 저장되지 않습니다. 새 작업을 시작할까요?')){
@@ -741,8 +734,12 @@
     }
   }
   showSelOverlayChk.addEventListener('change', renderSelectionOverlay);
+  // Selection actions no longer push their own undo step: opening 선택 영역
+  // already began a session (beginEdit), and every edit made while it's open —
+  // however many brush strokes, invert/clear clicks, feather adjustments — bundles
+  // into one undo checkpoint when the header's 적용 is pressed.
   document.getElementById('invertSelBtn').addEventListener('click', ()=>{
-    pushUndo(snapshotState());
+    beginEdit();
     ensureMaskInitialized();
     const w=maskCanvas.width,h=maskCanvas.height;
     const id = mctx.getImageData(0,0,w,h);
@@ -751,16 +748,17 @@
     renderSelectionOverlay();
   });
   document.getElementById('clearSelBtn').addEventListener('click', ()=>{
-    pushUndo(snapshotState());
+    beginEdit();
     mctx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
     hasSelection=false;
     renderSelectionOverlay();
   });
 
-  // feather (applies immediately, live, with its own undo push on release)
+  // feather (live preview against the mask as it was when the drag started)
   const featherRange = document.getElementById('featherRange');
   let featherBaseMask = null;
   featherRange.addEventListener('pointerdown', ()=>{
+    beginEdit();
     ensureMaskInitialized();
     featherBaseMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
   });
@@ -773,11 +771,6 @@
     renderSelectionOverlay();
   });
   featherRange.addEventListener('pointerup', ()=>{
-    if(featherBaseMask){
-      // undo target is state BEFORE feather started
-      const pre = {w:maskCanvas.width,h:maskCanvas.height,img:ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height),mask:featherBaseMask,hasSelection:true};
-      pushUndo(pre);
-    }
     featherBaseMask=null;
   });
 
@@ -857,7 +850,7 @@
     if(currentTool==='lasso'){
       lassoPoints = [[x,y]];
     } else if(currentTool==='brush-add' || currentTool==='brush-sub'){
-      pushUndo(snapshotState());
+      beginEdit();
       brushDrawing = true;
       paintBrush(x,y,currentTool==='brush-sub');
       renderSelectionOverlay();
@@ -888,7 +881,7 @@
   overlayCanvas.addEventListener('pointerup', e=>{
     if(releasePointer(e)){ dragStart=null; return; }
     if(currentTool==='lasso' && lassoPoints.length>2){
-      pushUndo(snapshotState());
+      beginEdit();
       mctx.save();
       mctx.globalCompositeOperation='source-over';
       mctx.fillStyle='white';
@@ -912,30 +905,56 @@
 
   // ---------- Resize ----------
   const resizeW = document.getElementById('resizeW'), resizeH = document.getElementById('resizeH');
+  const lockAspectToggle = document.getElementById('lockAspectToggle');
   let aspect = 1;
-  resizeW.addEventListener('input', ()=>{
-    if(document.getElementById('lockAspect').checked){
-      resizeH.value = Math.round(parseInt(resizeW.value||1,10)/aspect);
-    }
+  let lockAspectOn = true;
+  lockAspectToggle.addEventListener('click', ()=>{
+    lockAspectOn = !lockAspectOn;
+    lockAspectToggle.classList.toggle('active', lockAspectOn);
+    lockAspectToggle.setAttribute('aria-pressed', String(lockAspectOn));
   });
-  resizeH.addEventListener('input', ()=>{
-    if(document.getElementById('lockAspect').checked){
-      resizeW.value = Math.round(parseInt(resizeH.value||1,10)*aspect);
-    }
-  });
-  document.getElementById('applyResizeBtn').addEventListener('click', ()=>{
-    const w = Math.max(1,parseInt(resizeW.value,10)), h = Math.max(1,parseInt(resizeH.value,10));
-    pushUndo(snapshotState());
+  function syncResizeInputs(){
+    resizeW.value = mainCanvas.width;
+    resizeH.value = mainCanvas.height;
+    aspect = mainCanvas.width/mainCanvas.height;
+  }
+  // Resizing now live-previews (like the other adjustment menus) instead of
+  // applying immediately — the header's 적용/취소 commits or discards it.
+  function previewResize(w,h){
+    beginEdit();
+    if(!editingSnapshot) return;
+    const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
     const tmp = document.createElement('canvas');
-    tmp.width=mainCanvas.width; tmp.height=mainCanvas.height;
-    tmp.getContext('2d').drawImage(mainCanvas,0,0);
+    tmp.width = baseW; tmp.height = baseH;
+    tmp.getContext('2d').putImageData(editingSnapshot.img, 0, 0);
     setCanvasSize(w,h);
-    ctx.drawImage(tmp,0,0,tmp.width,tmp.height,0,0,w,h);
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(tmp, 0,0,baseW,baseH, 0,0,w,h);
     hasSelection=false;
     updateDims();
-    aspect = w/h;
-    renderSelectionOverlay();
+  }
+  resizeW.addEventListener('input', ()=>{
+    const w = Math.max(1, parseInt(resizeW.value||1,10));
+    let h;
+    if(lockAspectOn){ h = Math.max(1, Math.round(w/aspect)); resizeH.value = h; }
+    else h = Math.max(1, parseInt(resizeH.value||1,10));
+    previewResize(w,h);
   });
+  resizeH.addEventListener('input', ()=>{
+    const h = Math.max(1, parseInt(resizeH.value||1,10));
+    let w;
+    if(lockAspectOn){ w = Math.max(1, Math.round(h*aspect)); resizeW.value = w; }
+    else w = Math.max(1, parseInt(resizeW.value||1,10));
+    previewResize(w,h);
+  });
+  function applyResizeAction(){
+    commitEdit();
+    syncResizeInputs();
+  }
+  function cancelResizeAction(){
+    cancelEdit();
+    syncResizeInputs();
+  }
 
   // ---------- Generic live-preview edit machinery ----------
   function beginEdit(){
@@ -1065,22 +1084,13 @@
     cropRotateGestureEnabled = true;
     renderCropFrame();
   }
+  // Committing/discarding the pending edit is handled by applyCropAction/
+  // cancelCropAction (via the header's 적용/취소) before this ever runs, so
+  // hiding the frame here is purely visual.
   function hideCropFrame(){
     cropFrame.hidden = true;
     cropRotateGestureEnabled = false;
-    if(editingSnapshot){
-      if(cropRotationDeg!==0){
-        commitEdit();
-        cropRotationDeg = 0;
-        updateRulerUI();
-        // cropRect already tracks the now-baked-in (rotated) dimensions correctly —
-        // previewRotation kept it in sync on every change, so keep it as-is here.
-      } else {
-        editingSnapshot = null; // nothing actually changed; discard the baseline quietly
-      }
-    }
   }
-
   document.querySelectorAll('.ratio-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
@@ -1095,31 +1105,42 @@
   // A single-finger drag on the crop rect/handles resizes or moves it, but a
   // second finger landing anywhere (inside or outside the frame) hands off to the
   // shared two-finger pinch/rotate gesture instead — sharing the same
-  // activePointers/pinchActive state overlayCanvas uses, so a gesture that starts
-  // with one finger on a handle and the other over the image still works.
+  // activePointers/pinchActive state overlayCanvas uses, so a gesture can start
+  // with one or both fingers on a handle or inside the crop area.
+  //
+  // Listeners are attached once (persistent), not per-drag, because real
+  // multi-touch can land both fingers on the very same element: pointer capture
+  // and pointerup are per-pointerId, so a dynamically-added/removed listener pair
+  // gets torn down by whichever finger's pointerup happens to fire first — even
+  // if that isn't the finger that started the single-pointer drag. A `primaryId`
+  // closure variable instead tracks which pointer (if any) owns the current
+  // single-pointer action, mirroring how overlayCanvas's own tool handlers work.
   function attachGestureAwareDrag(el, {start, move}){
+    let primaryId = null;
+    let ctx = null;
     el.addEventListener('pointerdown', e=>{
-      try{ el.setPointerCapture(e.pointerId); }catch(err){}
       activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
       if(activePointers.size>=2){ if(!pinchActive) startPinch(); return; }
-      const ctx = start(e);
-      if(ctx===false) return;
-      function onMove(e2){
-        activePointers.set(e2.pointerId, {x:e2.clientX, y:e2.clientY});
-        if(activePointers.size>=2){ if(!pinchActive) startPinch(); updatePinch(); return; }
-        if(pinchActive) return;
-        move(e2, ctx);
-      }
-      function onUp(e2){
-        releasePointer(e2);
-        el.removeEventListener('pointermove', onMove);
-        el.removeEventListener('pointerup', onUp);
-        el.removeEventListener('pointercancel', onUp);
-      }
-      el.addEventListener('pointermove', onMove);
-      el.addEventListener('pointerup', onUp);
-      el.addEventListener('pointercancel', onUp);
+      if(primaryId!==null) return;
+      const c = start(e);
+      if(c===false) return;
+      try{ el.setPointerCapture(e.pointerId); }catch(err){}
+      primaryId = e.pointerId;
+      ctx = c;
     });
+    el.addEventListener('pointermove', e=>{
+      if(activePointers.has(e.pointerId)) activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      if(pinchActive){ updatePinch(); return; }
+      if(activePointers.size>=2) return;
+      if(e.pointerId!==primaryId || primaryId===null) return;
+      move(e, ctx);
+    });
+    function endPrimary(e){
+      if(e.pointerId===primaryId){ primaryId=null; ctx=null; }
+      releasePointer(e);
+    }
+    el.addEventListener('pointerup', endPrimary);
+    el.addEventListener('pointercancel', endPrimary);
   }
 
   document.querySelectorAll('.crop-handle').forEach(handle=>{
@@ -1223,19 +1244,8 @@
     rotateRuler.addEventListener('pointercancel', onUp);
   });
 
-  // ---------- Canvas sub-tabs (크롭 / 크기 조절) ----------
-  document.querySelectorAll('.subtab-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const group = btn.closest('.group');
-      group.querySelectorAll('.subtab-btn').forEach(b=>b.classList.remove('active'));
-      btn.classList.add('active');
-      group.querySelectorAll('.subpanel').forEach(p=> p.hidden = (p.id!==btn.dataset.subtab));
-      if(btn.dataset.subtab==='canvas-crop') showCropFrame(); else hideCropFrame();
-    });
-  });
-
-  document.getElementById('applyCropBtn').addEventListener('click', ()=>{
-    if(!cropRect) return;
+  function applyCropAction(){
+    if(!cropRect){ commitEdit(); return; }
     if(!editingSnapshot) beginEdit();
     commitEdit();
     const x=Math.round(cropRect.x), y=Math.round(cropRect.y);
@@ -1244,21 +1254,20 @@
     setCanvasSize(w,h);
     ctx.putImageData(data,0,0);
     hasSelection=false;
-    document.getElementById('resizeW').value=w;
-    document.getElementById('resizeH').value=h;
+    syncResizeInputs();
     updateDims();
     cropRotationDeg = 0;
     cropRect = rectForRatio(cropRatio);
     renderCropFrame();
     updateRulerUI();
-  });
-  document.getElementById('cancelCropBtn').addEventListener('click', ()=>{
+  }
+  function cancelCropAction(){
     cancelEdit();
     cropRotationDeg = 0;
     cropRect = rectForRatio(cropRatio);
     renderCropFrame();
     updateRulerUI();
-  });
+  }
 
   // ---------- Box blur helpers ----------
   function boxBlurPass(src,w,h,radius){
@@ -1342,14 +1351,12 @@
   }
   blurRange.addEventListener('input', ()=>{document.getElementById('blurVal').textContent=blurRange.value; runEffectsPreview();});
   noiseRange.addEventListener('input', ()=>{document.getElementById('noiseVal').textContent=noiseRange.value; runEffectsPreview();});
-  document.getElementById('applyEffectsBtn').addEventListener('click', ()=>{
-    commitEdit(); blurRange.value=0; noiseRange.value=0;
+  function resetEffectsInputs(){
+    blurRange.value=0; noiseRange.value=0;
     document.getElementById('blurVal').textContent='0'; document.getElementById('noiseVal').textContent='0';
-  });
-  document.getElementById('cancelEffectsBtn').addEventListener('click', ()=>{
-    cancelEdit(); blurRange.value=0; noiseRange.value=0;
-    document.getElementById('blurVal').textContent='0'; document.getElementById('noiseVal').textContent='0';
-  });
+  }
+  function applyEffectsAction(){ commitEdit(); resetEffectsInputs(); }
+  function cancelEffectsAction(){ cancelEdit(); resetEffectsInputs(); }
 
   // ---------- Selective color ----------
   const scRange = document.getElementById('scRange');
@@ -1397,14 +1404,12 @@
       runSCPreview();
     });
   });
-  document.getElementById('applySCBtn').addEventListener('click', ()=>{
-    commitEdit(); scCR.value=0;scMG.value=0;scYB.value=0;
+  function resetSCInputs(){
+    scCR.value=0;scMG.value=0;scYB.value=0;
     document.getElementById('scCRVal').textContent='0';document.getElementById('scMGVal').textContent='0';document.getElementById('scYBVal').textContent='0';
-  });
-  document.getElementById('cancelSCBtn').addEventListener('click', ()=>{
-    cancelEdit(); scCR.value=0;scMG.value=0;scYB.value=0;
-    document.getElementById('scCRVal').textContent='0';document.getElementById('scMGVal').textContent='0';document.getElementById('scYBVal').textContent='0';
-  });
+  }
+  function applySCAction(){ commitEdit(); resetSCInputs(); }
+  function cancelSCAction(){ cancelEdit(); resetSCInputs(); }
 
   // ---------- Levels ----------
   const lvInB=document.getElementById('lvInB'), lvInW=document.getElementById('lvInW'), lvGamma=document.getElementById('lvGamma');
@@ -1445,8 +1450,8 @@
     document.getElementById('lvOutBVal').textContent='0';
     document.getElementById('lvOutWVal').textContent='255';
   }
-  document.getElementById('applyLevelsBtn').addEventListener('click', ()=>{ commitEdit(); resetLevelsInputs(); });
-  document.getElementById('cancelLevelsBtn').addEventListener('click', ()=>{ cancelEdit(); resetLevelsInputs(); });
+  function applyLevelsAction(){ commitEdit(); resetLevelsInputs(); }
+  function cancelLevelsAction(){ cancelEdit(); resetLevelsInputs(); }
 
   // ---------- Curves ----------
   const curveCanvas = document.getElementById('curveCanvas');
@@ -1554,74 +1559,124 @@
     curvePoints=[[0,0],[255,255]];
     runCurvePreview();
   });
-  document.getElementById('applyCurveBtn').addEventListener('click', ()=>{
-    commitEdit(); curvePoints=[[0,0],[255,255]]; drawCurveEditor();
-  });
-  document.getElementById('cancelCurveBtn').addEventListener('click', ()=>{
-    cancelEdit(); curvePoints=[[0,0],[255,255]]; drawCurveEditor();
-  });
+  function applyCurveAction(){ commitEdit(); curvePoints=[[0,0],[255,255]]; drawCurveEditor(); }
+  function cancelCurveAction(){ cancelEdit(); curvePoints=[[0,0],[255,255]]; drawCurveEditor(); }
   drawCurveEditor();
 
   // ---------- Menu → tool mapping ----------
-  // There's no standalone tool tab/row anymore: opening the menu that needs a tool
-  // arms it directly (lasso for selection); menus that don't touch the canvas arm
-  // 'none'. Closing/collapsing a menu leaves the tool as-is, since the whole point
-  // of closing it is to keep using that tool with the full image visible. 캔버스 is
-  // handled separately below since it shows/hides the crop-frame overlay, not a tool.
+  // There's no standalone tool tab/row: opening the menu that needs a tool arms it
+  // directly (lasso for selection); menus that don't touch the canvas arm 'none'.
+  // 크롭 is handled separately since it shows/hides the crop-frame overlay, not a tool.
   const MENU_TOOL = {
     'group-selection': 'lasso',
+    'group-resize': 'none',
     'group-effects': 'none',
     'group-sc': 'none',
     'group-levels': 'none',
     'group-curve': 'none'
   };
   function onMenuOpen(id){
-    if(id==='group-canvas'){
+    if(id==='group-crop'){
       setTool('none');
-      const activeSubtab = document.querySelector('#group-canvas .subtab-btn.active');
-      if(!activeSubtab || activeSubtab.dataset.subtab==='canvas-crop') showCropFrame();
+      showCropFrame();
     } else {
+      if(id==='group-resize') syncResizeInputs();
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
     }
   }
   function onMenuClose(id){
-    if(id==='group-canvas') hideCropFrame();
+    if(id==='group-crop') hideCropFrame();
   }
+
+  // Every menu commits/discards as one bundled undo step via the header's
+  // 적용/취소, instead of each panel having its own apply/cancel buttons.
+  const MENU_SESSION = {
+    'group-selection': { commit: commitEdit, cancel: cancelEdit },
+    'group-crop': { commit: applyCropAction, cancel: cancelCropAction },
+    'group-resize': { commit: applyResizeAction, cancel: cancelResizeAction },
+    'group-effects': { commit: applyEffectsAction, cancel: cancelEffectsAction },
+    'group-sc': { commit: applySCAction, cancel: cancelSCAction },
+    'group-levels': { commit: applyLevelsAction, cancel: cancelLevelsAction },
+    'group-curve': { commit: applyCurveAction, cancel: cancelCurveAction }
+  };
+
+  let activeMenuId = null;
+
+  function enterMenu(id){
+    activeMenuId = id;
+    beginEdit();
+    onMenuOpen(id);
+    document.body.classList.add('editing-mode');
+  }
+  // Visually closes whichever menu is active (deactivates its mobile tab /
+  // collapses its desktop section) and returns the header/tab bar to normal.
+  function closeMenuUI(){
+    if(mobileTabBar){
+      mobileTabBar.querySelectorAll('.tab-btn.active').forEach(b=>b.classList.remove('active'));
+    }
+    sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
+    if(activeMenuId){
+      const group = document.getElementById(activeMenuId);
+      if(group) group.classList.add('collapsed');
+    }
+    document.body.classList.remove('editing-mode');
+    activeMenuId = null;
+  }
+  function applyActiveMenu(){
+    if(!activeMenuId) return;
+    const session = MENU_SESSION[activeMenuId];
+    if(session) session.commit();
+    onMenuClose(activeMenuId);
+    closeMenuUI();
+  }
+  function cancelActiveMenu(confirmFirst){
+    if(!activeMenuId) return;
+    if(confirmFirst && !window.confirm('변경 사항을 삭제할까요?')) return;
+    const session = MENU_SESSION[activeMenuId];
+    if(session) session.cancel();
+    onMenuClose(activeMenuId);
+    closeMenuUI();
+  }
+  menuApplyBtn.addEventListener('click', ()=> applyActiveMenu());
+  menuCancelBtn.addEventListener('click', ()=> cancelActiveMenu(true));
 
   // ---------- Desktop accordion ----------
   // Every group keeps the `open` attribute permanently (see note in the mobile CSS:
   // browsers hide a closed <details>'s content with a UA !important rule that no
   // author style can override, which broke the mobile tab panels). Collapse/expand
-  // is instead driven entirely by our own `.collapsed` class.
+  // is instead driven entirely by our own `.collapsed` class. Only one section is
+  // ever the "active" editing session at a time — expanding a different one while
+  // one is already open silently keeps (applies) whatever was pending in it first.
   document.querySelectorAll('aside#sidePanel > .group > summary').forEach(summary=>{
     summary.addEventListener('click', e=>{
       e.preventDefault();
       const group = summary.parentElement;
-      const wasCollapsed = group.classList.contains('collapsed');
-      group.classList.toggle('collapsed');
-      if(wasCollapsed) onMenuOpen(group.id); else onMenuClose(group.id);
+      if(group.id===activeMenuId){
+        applyActiveMenu();
+        return;
+      }
+      if(activeMenuId) applyActiveMenu();
+      document.querySelectorAll('aside#sidePanel > .group').forEach(g=> g.classList.add('collapsed'));
+      group.classList.remove('collapsed');
+      enterMenu(group.id);
     });
   });
 
   // ---------- Mobile bottom menu bar ----------
+  // The tab bar is only visible when no menu is active (see the editing-mode CSS),
+  // so a tab tap here always means "open a fresh menu" — closing always goes
+  // through the header's 적용/취소 first.
   if(mobileTabBar){
     const tabButtons = mobileTabBar.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const targetEl = document.getElementById(btn.dataset.target);
-        const wasActive = btn.classList.contains('active');
-        tabButtons.forEach(b=> b.classList.remove('active'));
-        sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=> el.classList.remove('mobile-active'));
-        if(!wasActive && targetEl){
-          btn.classList.add('active');
-          targetEl.classList.add('mobile-active');
-          onMenuOpen(btn.dataset.target);
-        } else {
-          onMenuClose(btn.dataset.target);
-        }
-        // Closing a menu (other than 캔버스) intentionally leaves the tool armed —
-        // users close it to see the full image while still drawing with that tool.
+        if(!targetEl) return;
+        btn.classList.add('active');
+        targetEl.classList.add('mobile-active');
+        targetEl.classList.remove('collapsed');
+        enterMenu(btn.dataset.target);
       });
     });
   }
