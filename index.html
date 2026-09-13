@@ -105,9 +105,10 @@
     color:var(--text);
   }
   .group > summary::-webkit-details-marker{display:none;}
-  .group > summary:after{content:'+';color:var(--text-dim);font-weight:400;}
-  .group[open] > summary:after{content:'−';}
+  .group > summary:after{content:'−';color:var(--text-dim);font-weight:400;}
+  .group.collapsed > summary:after{content:'+';}
   .group-body{padding:4px 12px 14px 12px;display:flex;flex-direction:column;gap:10px;}
+  .group.collapsed > .group-body{display:none;}
   label.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-dim);}
   label.field .row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--text);}
   input[type=range]{width:100%;accent-color:var(--accent);}
@@ -283,7 +284,7 @@
       </div>
     </details>
 
-    <details class="group" id="group-canvas">
+    <details class="group collapsed" id="group-canvas" open>
       <summary>캔버스 (크롭 / 사이즈)</summary>
       <div class="group-body">
         <p class="hint">크롭 도구로 영역을 드래그한 뒤 적용하세요.</p>
@@ -308,7 +309,7 @@
       </div>
     </details>
 
-    <details class="group" id="group-effects">
+    <details class="group collapsed" id="group-effects" open>
       <summary>효과 (블러 / 노이즈)</summary>
       <div class="group-body">
         <label class="field">
@@ -326,7 +327,7 @@
       </div>
     </details>
 
-    <details class="group" id="group-sc">
+    <details class="group collapsed" id="group-sc" open>
       <summary>선택색상 (색상 영역별 조정)</summary>
       <div class="group-body">
         <label class="field"><span class="row"><span>색상 범위</span></span>
@@ -358,7 +359,7 @@
       </div>
     </details>
 
-    <details class="group" id="group-levels">
+    <details class="group collapsed" id="group-levels" open>
       <summary>레벨</summary>
       <div class="group-body">
         <label class="field"><span class="row"><span>입력 최소값</span><span id="lvInBVal">0</span></span>
@@ -378,7 +379,7 @@
       </div>
     </details>
 
-    <details class="group" id="group-curve">
+    <details class="group collapsed" id="group-curve" open>
       <summary>곡선</summary>
       <div class="group-body">
         <canvas id="curveCanvas" width="256" height="256"></canvas>
@@ -1218,7 +1219,30 @@
   });
   drawCurveEditor();
 
+  // ---------- Desktop accordion ----------
+  // Every group keeps the `open` attribute permanently (see note in the mobile CSS:
+  // browsers hide a closed <details>'s content with a UA !important rule that no
+  // author style can override, which broke the mobile tab panels). Collapse/expand
+  // is instead driven entirely by our own `.collapsed` class.
+  document.querySelectorAll('aside#sidePanel > .group > summary').forEach(summary=>{
+    summary.addEventListener('click', e=>{
+      e.preventDefault();
+      summary.parentElement.classList.toggle('collapsed');
+    });
+  });
+
   // ---------- Mobile bottom menu bar ----------
+  // Each menu implies the tool it needs, since the tool selector lives in its own
+  // separate tab: opening a menu auto-selects that tool instead of requiring a trip
+  // to the 도구 tab first. 'toolrowPanel' (the tool tab itself) is left out on purpose.
+  const MENU_TOOL = {
+    'group-selection': 'lasso',
+    'group-canvas': 'crop',
+    'group-effects': 'none',
+    'group-sc': 'none',
+    'group-levels': 'none',
+    'group-curve': 'none'
+  };
   if(mobileTabBar){
     syncTabbarHeight();
     window.addEventListener('resize', syncTabbarHeight);
@@ -1232,6 +1256,10 @@
         if(!wasActive && targetEl){
           btn.classList.add('active');
           targetEl.classList.add('mobile-active');
+          const tool = MENU_TOOL[btn.dataset.target];
+          if(tool) setTool(tool);
+        } else {
+          setTool('none');
         }
       });
     });
