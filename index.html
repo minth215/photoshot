@@ -160,13 +160,6 @@
     }
     .mobile-tabbar::-webkit-scrollbar{height:3px;}
 
-    aside#sidePanel > #toolrowPanel{display:none;}
-    aside#sidePanel > #toolrowPanel.mobile-active{
-      display:flex;flex-wrap:wrap;gap:8px;
-      position:absolute;left:0;right:0;bottom:var(--tabbar-h,56px);
-      background:var(--panel);border-top:1px solid var(--line);
-      padding:12px 14px;margin:0;box-shadow:0 -10px 30px rgba(0,0,0,.45);z-index:15;
-    }
     aside#sidePanel > .group{display:none;}
     aside#sidePanel > .group.mobile-active{
       display:block;
@@ -219,10 +212,6 @@
   <aside id="sidePanel" style="display:none;">
 
     <nav class="mobile-tabbar" id="mobileTabBar">
-      <button class="tab-btn" type="button" data-target="toolrowPanel">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 8-6 2-2 6-6-16z"/></svg>
-        <span>도구</span>
-      </button>
       <button class="tab-btn" type="button" data-target="group-selection">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
         <span>선택영역</span>
@@ -249,18 +238,15 @@
       </button>
     </nav>
 
-    <div class="toolrow" id="toolrowPanel">
-      <button class="toolbtn" data-tool="none" title="이동/없음">선택 없음</button>
-      <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
-      <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
-      <button class="toolbtn" data-tool="brush-sub" title="브러쉬로 선택 영역을 뺍니다">브러쉬 -</button>
-      <button class="toolbtn" data-tool="crop" title="드래그하여 자를 영역을 지정합니다">크롭</button>
-    </div>
-
     <details class="group" id="group-selection" open>
       <summary>선택 영역</summary>
       <div class="group-body">
         <p class="hint">올가미·브러쉬로 그린 영역에만 아래 보정이 적용돼요. 아무 선택도 없으면 이미지 전체에 적용됩니다.</p>
+        <div class="toolrow">
+          <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
+          <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
+          <button class="toolbtn" data-tool="brush-sub" title="브러쉬로 선택 영역을 뺍니다">브러쉬 -</button>
+        </div>
         <label class="field" id="brushSizeWrap" style="display:none;">
           <span class="row"><span>브러쉬 크기</span><span id="brushSizeVal">40</span></span>
           <input type="range" id="brushSize" min="4" max="200" value="40">
@@ -849,7 +835,6 @@
     updateDims();
     document.getElementById('applyCropBtn').disabled=true;
     document.getElementById('cancelCropBtn').disabled=true;
-    setTool('none');
   });
   document.getElementById('cancelCropBtn').addEventListener('click', ()=>{
     cropRect=null;
@@ -1219,22 +1204,11 @@
   });
   drawCurveEditor();
 
-  // ---------- Desktop accordion ----------
-  // Every group keeps the `open` attribute permanently (see note in the mobile CSS:
-  // browsers hide a closed <details>'s content with a UA !important rule that no
-  // author style can override, which broke the mobile tab panels). Collapse/expand
-  // is instead driven entirely by our own `.collapsed` class.
-  document.querySelectorAll('aside#sidePanel > .group > summary').forEach(summary=>{
-    summary.addEventListener('click', e=>{
-      e.preventDefault();
-      summary.parentElement.classList.toggle('collapsed');
-    });
-  });
-
-  // ---------- Mobile bottom menu bar ----------
-  // Each menu implies the tool it needs, since the tool selector lives in its own
-  // separate tab: opening a menu auto-selects that tool instead of requiring a trip
-  // to the 도구 tab first. 'toolrowPanel' (the tool tab itself) is left out on purpose.
+  // ---------- Menu → tool mapping ----------
+  // There's no standalone tool tab/row anymore: opening the menu that needs a tool
+  // arms it directly (lasso for selection, crop for canvas); menus that don't touch
+  // the canvas arm 'none'. Closing/collapsing a menu leaves the tool as-is, since the
+  // whole point of closing it is to keep using that tool with the full image visible.
   const MENU_TOOL = {
     'group-selection': 'lasso',
     'group-canvas': 'crop',
@@ -1243,6 +1217,26 @@
     'group-levels': 'none',
     'group-curve': 'none'
   };
+
+  // ---------- Desktop accordion ----------
+  // Every group keeps the `open` attribute permanently (see note in the mobile CSS:
+  // browsers hide a closed <details>'s content with a UA !important rule that no
+  // author style can override, which broke the mobile tab panels). Collapse/expand
+  // is instead driven entirely by our own `.collapsed` class.
+  document.querySelectorAll('aside#sidePanel > .group > summary').forEach(summary=>{
+    summary.addEventListener('click', e=>{
+      e.preventDefault();
+      const group = summary.parentElement;
+      const wasCollapsed = group.classList.contains('collapsed');
+      group.classList.toggle('collapsed');
+      if(wasCollapsed){
+        const tool = MENU_TOOL[group.id];
+        if(tool) setTool(tool);
+      }
+    });
+  });
+
+  // ---------- Mobile bottom menu bar ----------
   if(mobileTabBar){
     syncTabbarHeight();
     window.addEventListener('resize', syncTabbarHeight);
