@@ -45,6 +45,7 @@
   .header-side-left{grid-column:1;justify-content:flex-start;}
   .header-side-right{grid-column:3;justify-content:flex-end;gap:8px;}
   .header-actions{grid-column:2;display:flex;gap:8px;justify-content:center;}
+  .header-crop-size{grid-column:2;display:none;justify-content:center;align-items:center;font-family:var(--mono);font-size:13px;color:var(--accent);white-space:nowrap;}
   .header-close{grid-column:3;display:flex;justify-content:flex-end;}
   .iconbtn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
   .iconbtn svg{width:18px;height:18px;}
@@ -55,6 +56,7 @@
   body.editing-mode .menu-cancel,
   body.editing-mode .menu-apply{display:inline-flex;}
   body.editing-mode .header-close{grid-column:3;display:flex;justify-content:flex-end;}
+  body.crop-editing .header-crop-size{display:flex;}
   .toggle-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
   button{
     font-family:var(--sans);
@@ -93,14 +95,18 @@
   .canvas-holder{position:relative;box-shadow:0 8px 30px rgba(0,0,0,.5);}
   .canvas-holder canvas{display:block;}
   #overlayCanvas{position:absolute;top:0;left:0;touch-action:none;}
+  .canvas-holder.crop-mode{overflow:hidden;}
+  .canvas-holder.crop-mode #mainCanvas{position:absolute;}
 
-  /* ---------- Crop frame overlay ---------- */
-  .crop-frame{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:20;}
+  /* ---------- Crop frame overlay ----------
+     The frame itself never moves: it always stays centered in the fixed-size
+     crop viewport. Dragging the backdrop (crop-frame) pans the image behind it;
+     only the handles (children, pointer-events re-enabled) resize the frame. */
+  .crop-frame{position:absolute;inset:0;overflow:hidden;pointer-events:auto;touch-action:none;z-index:20;cursor:move;}
   .crop-rect{
-    position:absolute;pointer-events:auto;touch-action:none;
+    position:absolute;pointer-events:none;
     box-shadow:0 0 0 9999px rgba(0,0,0,.55);
     border:1px solid rgba(255,255,255,.9);
-    cursor:move;
   }
   .crop-gridline{position:absolute;background:rgba(255,255,255,.35);pointer-events:none;}
   .crop-gridline.v1{left:33.333%;top:0;bottom:0;width:1px;}
@@ -108,16 +114,16 @@
   .crop-gridline.h1{top:33.333%;left:0;right:0;height:1px;}
   .crop-gridline.h2{top:66.666%;left:0;right:0;height:1px;}
   .crop-handle{position:absolute;pointer-events:auto;touch-action:none;}
-  .crop-handle.corner{width:26px;height:26px;}
-  .crop-handle.corner::after{content:'';position:absolute;width:18px;height:18px;border:3px solid #fff;}
-  .crop-handle.nw{top:-13px;left:-13px;cursor:nwse-resize;}
-  .crop-handle.nw::after{top:4px;left:4px;border-right:none;border-bottom:none;}
-  .crop-handle.ne{top:-13px;right:-13px;cursor:nesw-resize;}
-  .crop-handle.ne::after{top:4px;right:4px;border-left:none;border-bottom:none;}
-  .crop-handle.sw{bottom:-13px;left:-13px;cursor:nesw-resize;}
-  .crop-handle.sw::after{bottom:4px;left:4px;border-right:none;border-top:none;}
-  .crop-handle.se{bottom:-13px;right:-13px;cursor:nwse-resize;}
-  .crop-handle.se::after{bottom:4px;right:4px;border-left:none;border-top:none;}
+  .crop-handle.corner{width:22px;height:22px;}
+  .crop-handle.corner::after{content:'';position:absolute;width:16px;height:16px;border:3px solid #fff;}
+  .crop-handle.nw{top:-11px;left:-11px;cursor:nwse-resize;}
+  .crop-handle.nw::after{top:3px;left:3px;border-right:none;border-bottom:none;}
+  .crop-handle.ne{top:-11px;right:-11px;cursor:nesw-resize;}
+  .crop-handle.ne::after{top:3px;right:3px;border-left:none;border-bottom:none;}
+  .crop-handle.sw{bottom:-11px;left:-11px;cursor:nesw-resize;}
+  .crop-handle.sw::after{bottom:3px;left:3px;border-right:none;border-top:none;}
+  .crop-handle.se{bottom:-11px;right:-11px;cursor:nwse-resize;}
+  .crop-handle.se::after{bottom:3px;right:3px;border-left:none;border-top:none;}
   .crop-handle.n{top:-11px;left:50%;width:40px;height:22px;margin-left:-20px;cursor:ns-resize;}
   .crop-handle.s{bottom:-11px;left:50%;width:40px;height:22px;margin-left:-20px;cursor:ns-resize;}
   .crop-handle.e{right:-11px;top:50%;width:22px;height:40px;margin-top:-20px;cursor:ew-resize;}
@@ -253,6 +259,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
+  <div class="header-crop-size" id="headerCropSize"></div>
   <div class="header-close header-side-right">
     <button id="closeBtn" class="iconbtn close-btn" disabled type="button" title="닫기" aria-label="닫기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
@@ -484,6 +491,7 @@
   const mobileTabBar = document.getElementById('mobileTabBar');
   const menuCancelBtn = document.getElementById('menuCancelBtn');
   const menuApplyBtn = document.getElementById('menuApplyBtn');
+  const headerCropSize = document.getElementById('headerCropSize');
 
   function updateHistoryButtons(){
     const hasHistory = undoStack.length>0;
@@ -528,24 +536,34 @@
   let userZoomed = false;
   const MIN_ZOOM = 0.15, MAX_ZOOM = 8;
 
-  function computeFitScale(){
-    if(!mainCanvas.width || !mainCanvas.height) return 1;
+  function stageAvailSize(){
     const cs = getComputedStyle(stageWrap);
     const padX = parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight);
     const padY = parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);
-    const availW = Math.max(50, stageWrap.clientWidth-padX);
-    const availH = Math.max(50, stageWrap.clientHeight-padY);
+    return {
+      w: Math.max(50, stageWrap.clientWidth-padX),
+      h: Math.max(50, stageWrap.clientHeight-padY)
+    };
+  }
+
+  function computeFitScale(){
+    if(!mainCanvas.width || !mainCanvas.height) return 1;
+    const {w:availW, h:availH} = stageAvailSize();
     return Math.min(1, availW/mainCanvas.width, availH/mainCanvas.height);
   }
 
+  // While the crop menu is active, the canvas's on-screen position/size is driven
+  // entirely by the crop pan/zoom state (see renderCropFrame), not by viewScale —
+  // otherwise a rotation-triggered dimension change during crop editing would
+  // stomp the crop-specific zoom back to a plain fit-to-screen.
   function applyCanvasDisplaySize(){
+    if(cropModeActive){ renderCropFrame(); return; }
     const w = Math.round(mainCanvas.width*viewScale);
     const h = Math.round(mainCanvas.height*viewScale);
     mainCanvas.style.width = w+'px';
     mainCanvas.style.height = h+'px';
     overlayCanvas.style.width = w+'px';
     overlayCanvas.style.height = h+'px';
-    renderCropFrame();
   }
 
   function fitToScreen(){
@@ -565,7 +583,19 @@
   // now push the image area rather than floating over it (so its available height
   // varies by menu and the image should always fill whatever room is left).
   new ResizeObserver(()=>{
-    if(!userZoomed) fitToScreen();
+    if(cropModeActive){
+      const avail = stageAvailSize();
+      cropViewportW = avail.w; cropViewportH = avail.h;
+      canvasHolder.style.width = cropViewportW+'px';
+      canvasHolder.style.height = cropViewportH+'px';
+      frameW = Math.min(frameW, cropViewportW);
+      frameH = Math.min(frameH, cropViewportH);
+      imgScale = clampImgScale(imgScale);
+      clampImgOffset();
+      renderCropFrame();
+    } else if(!userZoomed){
+      fitToScreen();
+    }
   }).observe(stageWrap);
 
   // ---------- File loading ----------
@@ -649,8 +679,13 @@
     lassoPoints=[]; dragStart=null; brushDrawing=false;
     setTool('none');
     cropFrame.hidden=true;
-    cropRotateGestureEnabled=false;
-    cropRect=null; cropRatio=null; cropRotationDeg=0;
+    cropModeActive=false;
+    canvasHolder.classList.remove('crop-mode');
+    canvasHolder.style.width=''; canvasHolder.style.height='';
+    mainCanvas.style.left=''; mainCanvas.style.top='';
+    overlayCanvas.style.display='';
+    cropRatio=null; cropRotationDeg=0;
+    frameW=0; frameH=0; imgScale=1; imgOffsetX=0; imgOffsetY=0;
     document.querySelectorAll('.ratio-btn').forEach(b=> b.classList.toggle('active', b.dataset.ratio==='free'));
     updateRulerUI();
     lockAspectOn = true;
@@ -677,6 +712,7 @@
     }
     activeMenuId = null;
     document.body.classList.remove('editing-mode');
+    document.body.classList.remove('crop-editing');
     document.querySelectorAll('aside#sidePanel > .group').forEach(g=> g.classList.add('collapsed'));
   }
   closeBtn.addEventListener('click', ()=>{
@@ -809,7 +845,7 @@
   let pinchStartScale = 1;
   let pinchStartAngle = 0;
   let pinchStartRotation = 0;
-  let cropRotateGestureEnabled = false; // true while the 크롭 sub-panel is open
+  let cropModeActive = false; // true while the 크롭 sub-panel is open
 
   function pointerDistance(){
     const pts = [...activePointers.values()];
@@ -822,7 +858,7 @@
   function startPinch(){
     pinchActive = true;
     pinchStartDist = pointerDistance();
-    pinchStartScale = viewScale;
+    pinchStartScale = cropModeActive ? imgScale : viewScale;
     pinchStartAngle = pointerAngle();
     pinchStartRotation = cropRotationDeg;
     // a second finger cancels any in-progress single-finger tool action
@@ -833,8 +869,17 @@
   }
   function updatePinch(){
     if(!pinchActive || activePointers.size<2 || pinchStartDist<=0) return;
-    setViewScale(pinchStartScale * (pointerDistance()/pinchStartDist));
-    if(cropRotateGestureEnabled){
+    const scaleFactor = pointerDistance()/pinchStartDist;
+    // In crop mode, pinch-zoom scales the IMAGE behind the fixed frame instead
+    // of the general view — the frame itself must never move or resize from this.
+    if(cropModeActive){
+      imgScale = clampImgScale(pinchStartScale * scaleFactor);
+      clampImgOffset();
+      renderCropFrame();
+    } else {
+      setViewScale(pinchStartScale * scaleFactor);
+    }
+    if(cropModeActive){
       const angleDelta = pointerAngle()-pinchStartAngle;
       previewRotation(Math.max(-45, Math.min(45, pinchStartRotation+angleDelta)));
       updateRulerUI();
@@ -988,7 +1033,11 @@
     editingSnapshot = null;
   }
 
-  // ---------- Crop frame (ratio-locked, handle-based) ----------
+  // ---------- Crop frame (fixed & centered; image pans/zooms behind it) ----------
+  // The frame's size/position is defined purely in the crop viewport's own CSS-px
+  // space and is ALWAYS centered — it never moves. Panning (one finger) and
+  // pinch-zooming (two fingers) instead move/scale the IMAGE (mainCanvas) behind
+  // the fixed frame; only ratio buttons and handle drags change the frame's size.
   const cropFrame = document.getElementById('cropFrame');
   const cropFrameRect = document.getElementById('cropFrameRect');
   const rotateRuler = document.getElementById('rotateRuler');
@@ -996,92 +1045,81 @@
   const rotateValueEl = document.getElementById('rotateValue');
   const MIN_CROP = 20;
   const PX_PER_DEG = 6;
-  let cropRect = null;       // {x,y,w,h} in canvas pixel space
   let cropRatio = null;      // null = free, else numeric width/height
   let cropRotationDeg = 0;
+  let cropViewportW = 0, cropViewportH = 0; // fixed crop-mode viewport size, CSS px
+  let frameW = 0, frameH = 0;               // crop frame size, CSS px (always centered)
+  let imgScale = 1;                          // crop-mode image zoom, CSS px per canvas px
+  let imgOffsetX = 0, imgOffsetY = 0;        // image-center pan offset from viewport center, CSS px
 
-  function rectForRatio(R){
-    const imgW = mainCanvas.width, imgH = mainCanvas.height;
+  function defaultFrameSize(R){
+    const vw = cropViewportW, vh = cropViewportH;
     let w, h;
-    if(R==null){ w = imgW*0.8; h = imgH*0.8; }
-    else if(imgW/imgH > R){ h = imgH*0.9; w = h*R; }
-    else { w = imgW*0.9; h = w/R; }
-    w = Math.max(MIN_CROP, Math.min(w, imgW));
-    h = Math.max(MIN_CROP, Math.min(h, imgH));
-    return { x:(imgW-w)/2, y:(imgH-h)/2, w, h };
-  }
-
-  function clampRectPosition(r){
-    r.x = Math.max(0, Math.min(r.x, mainCanvas.width - r.w));
-    r.y = Math.max(0, Math.min(r.y, mainCanvas.height - r.h));
-    return r;
-  }
-
-  // Free ratio: each moving edge is independent. Locked ratio: an edge handle
-  // resizes around the opposite edge along its own axis and re-centers the
-  // other axis; a corner handle resizes from the opposite corner as anchor.
-  function resizeCropRect(handle, dx, dy, s){
-    const imgW = mainCanvas.width, imgH = mainCanvas.height;
-    const moveT = handle.includes('n'), moveB = handle.includes('s');
-    const moveL = handle.includes('w'), moveR = handle.includes('e');
-    let r = {x:s.x, y:s.y, w:s.w, h:s.h};
-    if(cropRatio==null){
-      if(moveT){ let newY = Math.max(0, Math.min(s.y+dy, s.y+s.h-MIN_CROP)); r.y=newY; r.h = s.y+s.h-newY; }
-      if(moveB){ r.h = Math.max(MIN_CROP, Math.min(s.h+dy, imgH-s.y)); }
-      if(moveL){ let newX = Math.max(0, Math.min(s.x+dx, s.x+s.w-MIN_CROP)); r.x=newX; r.w = s.x+s.w-newX; }
-      if(moveR){ r.w = Math.max(MIN_CROP, Math.min(s.w+dx, imgW-s.x)); }
-    } else {
-      const R = cropRatio;
-      const isCorner = (moveT||moveB) && (moveL||moveR);
-      if(isCorner){
-        const anchorX = moveL ? (s.x+s.w) : s.x;
-        const anchorY = moveT ? (s.y+s.h) : s.y;
-        const newCornerX = moveL ? (s.x+dx) : (s.x+s.w+dx);
-        let w = Math.max(MIN_CROP, Math.abs(newCornerX-anchorX));
-        let h = w/R;
-        const maxW = moveL ? anchorX : (imgW-anchorX);
-        const maxH = moveT ? anchorY : (imgH-anchorY);
-        if(w>maxW){ w=maxW; h=w/R; }
-        if(h>maxH){ h=maxH; w=h*R; }
-        r.w=w; r.h=h;
-        r.x = moveL ? anchorX-w : anchorX;
-        r.y = moveT ? anchorY-h : anchorY;
-      } else if(moveT||moveB){
-        let newH = Math.max(MIN_CROP, moveB ? (s.h+dy) : (s.h-dy));
-        let newW = newH*R;
-        if(newW>imgW){ newW=imgW; newH=newW/R; }
-        if(newH>imgH){ newH=imgH; newW=newH*R; }
-        const cx = s.x+s.w/2;
-        r.w=newW; r.h=newH;
-        r.x = cx-newW/2;
-        r.y = moveB ? s.y : (s.y+s.h-newH);
-      } else if(moveL||moveR){
-        let newW = Math.max(MIN_CROP, moveR ? (s.w+dx) : (s.w-dx));
-        let newH = newW/R;
-        if(newH>imgH){ newH=imgH; newW=newH*R; }
-        if(newW>imgW){ newW=imgW; newH=newW/R; }
-        const cy = s.y+s.h/2;
-        r.w=newW; r.h=newH;
-        r.y = cy-newH/2;
-        r.x = moveR ? s.x : (s.x+s.w-newW);
-      }
+    if(R==null){ w = vw*0.8; h = vh*0.8; }
+    else {
+      w = vw*0.85; h = w/R;
+      if(h > vh*0.85){ h = vh*0.85; w = h*R; }
     }
-    return clampRectPosition(r);
+    return { w: Math.max(MIN_CROP, w), h: Math.max(MIN_CROP, h) };
+  }
+
+  // The image must always fully cover the frame so a crop always has real pixel
+  // data behind every corner — this is the minimum zoom allowed.
+  function minImgScale(){
+    if(!frameW || !frameH || !mainCanvas.width || !mainCanvas.height) return 1;
+    return Math.max(frameW/mainCanvas.width, frameH/mainCanvas.height);
+  }
+  function clampImgScale(s){
+    return Math.max(minImgScale(), Math.min(MAX_ZOOM, s));
+  }
+  function clampImgOffset(){
+    const dispW = mainCanvas.width*imgScale, dispH = mainCanvas.height*imgScale;
+    const maxX = Math.max(0, (dispW-frameW)/2), maxY = Math.max(0, (dispH-frameH)/2);
+    imgOffsetX = Math.max(-maxX, Math.min(maxX, imgOffsetX));
+    imgOffsetY = Math.max(-maxY, Math.min(maxY, imgOffsetY));
+  }
+  // Resets the frame to a fresh centered default and the image to "fit the frame
+  // exactly, no pan" — used whenever a crop session starts over (menu opened,
+  // ratio changed, or the previous session applied/cancelled).
+  function resetCropView(){
+    const sz = defaultFrameSize(cropRatio);
+    frameW = sz.w; frameH = sz.h;
+    imgScale = minImgScale();
+    imgOffsetX = 0; imgOffsetY = 0;
+  }
+
+  function updateCropSizeReadout(){
+    if(!cropModeActive) return;
+    const w = Math.max(1, Math.round(frameW/imgScale));
+    const h = Math.max(1, Math.round(frameH/imgScale));
+    headerCropSize.textContent = w + ' × ' + h + ' px';
   }
 
   function renderCropFrame(){
-    if(!cropRect || cropFrame.hidden) return;
-    cropFrameRect.style.left = (cropRect.x*viewScale)+'px';
-    cropFrameRect.style.top = (cropRect.y*viewScale)+'px';
-    cropFrameRect.style.width = (cropRect.w*viewScale)+'px';
-    cropFrameRect.style.height = (cropRect.h*viewScale)+'px';
+    if(!cropModeActive) return;
+    cropFrameRect.style.left = ((cropViewportW-frameW)/2)+'px';
+    cropFrameRect.style.top = ((cropViewportH-frameH)/2)+'px';
+    cropFrameRect.style.width = frameW+'px';
+    cropFrameRect.style.height = frameH+'px';
+    const dispW = mainCanvas.width*imgScale, dispH = mainCanvas.height*imgScale;
+    mainCanvas.style.left = (cropViewportW/2 + imgOffsetX - dispW/2)+'px';
+    mainCanvas.style.top = (cropViewportH/2 + imgOffsetY - dispH/2)+'px';
+    mainCanvas.style.width = dispW+'px';
+    mainCanvas.style.height = dispH+'px';
+    updateCropSizeReadout();
   }
 
   function showCropFrame(){
     beginEdit();
-    if(!cropRect) cropRect = rectForRatio(cropRatio);
+    cropModeActive = true;
+    const avail = stageAvailSize();
+    cropViewportW = avail.w; cropViewportH = avail.h;
+    canvasHolder.classList.add('crop-mode');
+    canvasHolder.style.width = cropViewportW+'px';
+    canvasHolder.style.height = cropViewportH+'px';
+    overlayCanvas.style.display = 'none';
+    resetCropView();
     cropFrame.hidden = false;
-    cropRotateGestureEnabled = true;
     renderCropFrame();
   }
   // Committing/discarding the pending edit is handled by applyCropAction/
@@ -1089,7 +1127,14 @@
   // hiding the frame here is purely visual.
   function hideCropFrame(){
     cropFrame.hidden = true;
-    cropRotateGestureEnabled = false;
+    cropModeActive = false;
+    canvasHolder.classList.remove('crop-mode');
+    canvasHolder.style.width = '';
+    canvasHolder.style.height = '';
+    mainCanvas.style.left = '';
+    mainCanvas.style.top = '';
+    overlayCanvas.style.display = '';
+    fitToScreen();
   }
   document.querySelectorAll('.ratio-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1097,16 +1142,17 @@
       btn.classList.add('active');
       const rv = btn.dataset.ratio;
       cropRatio = rv==='free' ? null : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
-      cropRect = rectForRatio(cropRatio);
+      resetCropView();
       renderCropFrame();
     });
   });
 
-  // A single-finger drag on the crop rect/handles resizes or moves it, but a
-  // second finger landing anywhere (inside or outside the frame) hands off to the
-  // shared two-finger pinch/rotate gesture instead — sharing the same
-  // activePointers/pinchActive state overlayCanvas uses, so a gesture can start
-  // with one or both fingers on a handle or inside the crop area.
+  // A single-finger drag resizes a handle (frame stays centered, growing/shrinking
+  // symmetrically about its own center) or, anywhere else on the crop-frame
+  // backdrop, pans the image. A second finger landing anywhere hands off to the
+  // shared two-finger pinch/rotate gesture — sharing the same activePointers/
+  // pinchActive state overlayCanvas uses, so a gesture can start with one or both
+  // fingers on a handle or inside the crop area.
   //
   // Listeners are attached once (persistent), not per-drag, because real
   // multi-touch can land both fingers on the very same element: pointer capture
@@ -1143,29 +1189,68 @@
     el.addEventListener('pointercancel', endPrimary);
   }
 
+  // Center-anchored resize: dragging one edge/corner grows or shrinks the frame
+  // symmetrically about its own center, so it never has to move to stay centered.
+  function resizeFrame(handle, dx, dy, startFrame){
+    const moveT = handle.includes('n'), moveB = handle.includes('s');
+    const moveL = handle.includes('w'), moveR = handle.includes('e');
+    const isCorner = (moveT||moveB) && (moveL||moveR);
+    const maxW = cropViewportW, maxH = cropViewportH;
+    let w = startFrame.w, h = startFrame.h;
+    if(cropRatio==null){
+      if(moveL||moveR) w = startFrame.w + (moveR?dx:-dx)*2;
+      if(moveT||moveB) h = startFrame.h + (moveB?dy:-dy)*2;
+      w = Math.max(MIN_CROP, Math.min(maxW, w));
+      h = Math.max(MIN_CROP, Math.min(maxH, h));
+    } else {
+      const R = cropRatio;
+      if(isCorner){
+        const dW = moveR?dx:-dx;
+        const dH = (moveB?dy:-dy) * R;
+        const d = Math.abs(dW) > Math.abs(dH) ? dW : dH;
+        w = Math.max(MIN_CROP, startFrame.w + d*2);
+      } else if(moveL||moveR){
+        w = Math.max(MIN_CROP, startFrame.w + (moveR?dx:-dx)*2);
+      } else {
+        h = Math.max(MIN_CROP, startFrame.h + (moveB?dy:-dy)*2);
+        w = h*R;
+      }
+      if(isCorner || moveL || moveR) h = w/R;
+      if(w>maxW){ w=maxW; h=w/R; }
+      if(h>maxH){ h=maxH; w=h*R; }
+      w = Math.max(MIN_CROP, w); h = Math.max(MIN_CROP, h);
+    }
+    return {w, h};
+  }
+
   document.querySelectorAll('.crop-handle').forEach(handle=>{
     attachGestureAwareDrag(handle, {
       start(e){
         e.preventDefault(); e.stopPropagation();
-        return { startX:e.clientX, startY:e.clientY, startRect:{x:cropRect.x,y:cropRect.y,w:cropRect.w,h:cropRect.h} };
+        return { startX:e.clientX, startY:e.clientY, startFrame:{w:frameW,h:frameH} };
       },
-      move(e2, ctx){
-        const dx=(e2.clientX-ctx.startX)/viewScale, dy=(e2.clientY-ctx.startY)/viewScale;
-        cropRect = resizeCropRect(handle.dataset.handle, dx, dy, ctx.startRect);
+      move(e2, hctx){
+        const dx = e2.clientX-hctx.startX, dy = e2.clientY-hctx.startY;
+        const sz = resizeFrame(handle.dataset.handle, dx, dy, hctx.startFrame);
+        frameW = sz.w; frameH = sz.h;
+        imgScale = clampImgScale(imgScale);
+        clampImgOffset();
         renderCropFrame();
       }
     });
   });
 
-  attachGestureAwareDrag(cropFrameRect, {
+  // Dragging anywhere on the crop-frame backdrop (inside or outside the visible
+  // window) pans the image — the frame itself never moves.
+  attachGestureAwareDrag(cropFrame, {
     start(e){
-      if(e.target!==cropFrameRect) return false;
       e.preventDefault();
-      return { startX:e.clientX, startY:e.clientY, startRect:{x:cropRect.x,y:cropRect.y,w:cropRect.w,h:cropRect.h} };
+      return { startX:e.clientX, startY:e.clientY, startOffX:imgOffsetX, startOffY:imgOffsetY };
     },
-    move(e2, ctx){
-      const dx=(e2.clientX-ctx.startX)/viewScale, dy=(e2.clientY-ctx.startY)/viewScale;
-      cropRect = clampRectPosition({x:ctx.startRect.x+dx, y:ctx.startRect.y+dy, w:ctx.startRect.w, h:ctx.startRect.h});
+    move(e2, pctx){
+      imgOffsetX = pctx.startOffX + (e2.clientX-pctx.startX);
+      imgOffsetY = pctx.startOffY + (e2.clientY-pctx.startY);
+      clampImgOffset();
       renderCropFrame();
     }
   });
@@ -1183,7 +1268,6 @@
     cropRotationDeg = deg;
     const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
     const {w:newW, h:newH} = rotatedBounds(baseW, baseH, deg);
-    const oldW = mainCanvas.width, oldH = mainCanvas.height;
     setCanvasSize(newW, newH);
     const tmp = document.createElement('canvas');
     tmp.width = baseW; tmp.height = baseH;
@@ -1194,22 +1278,13 @@
     ctx.rotate(deg*Math.PI/180);
     ctx.drawImage(tmp, -baseW/2, -baseH/2);
     ctx.restore();
-    // The image is always drawn centered in the (possibly grown) canvas, so a crop
-    // rect the user already adjusted just needs to shift by the same amount the
-    // center moved — not get thrown away and replaced with a fresh default rect.
-    if(cropRect){
-      const dx = (newW-oldW)/2, dy = (newH-oldH)/2;
-      cropRect = {x:cropRect.x+dx, y:cropRect.y+dy, w:cropRect.w, h:cropRect.h};
-      if(cropRect.w>newW || cropRect.h>newH){
-        const scale = cropRatio!=null ? Math.min(newW/cropRect.w, newH/cropRect.h, 1) : 1;
-        cropRect.w = cropRatio!=null ? cropRect.w*scale : Math.min(cropRect.w, newW);
-        cropRect.h = cropRatio!=null ? cropRect.h*scale : Math.min(cropRect.h, newH);
-      }
-      cropRect = clampRectPosition(cropRect);
-    } else {
-      cropRect = rectForRatio(cropRatio);
+    // The frame itself never changes from a rotation — only the image's own pixel
+    // bounds grew, so the zoom/pan just need re-clamping against the new size.
+    if(cropModeActive){
+      imgScale = clampImgScale(imgScale);
+      clampImgOffset();
+      renderCropFrame();
     }
-    renderCropFrame();
     updateRulerUI();
   }
   function updateRulerUI(){
@@ -1245,27 +1320,28 @@
   });
 
   function applyCropAction(){
-    if(!cropRect){ commitEdit(); return; }
     if(!editingSnapshot) beginEdit();
     commitEdit();
-    const x=Math.round(cropRect.x), y=Math.round(cropRect.y);
-    const w=Math.round(cropRect.w), h=Math.round(cropRect.h);
-    const data = ctx.getImageData(x,y,w,h);
-    setCanvasSize(w,h);
+    const cropPxW = Math.max(1, Math.round(frameW/imgScale));
+    const cropPxH = Math.max(1, Math.round(frameH/imgScale));
+    const srcX = Math.round(mainCanvas.width/2 - (frameW/2+imgOffsetX)/imgScale);
+    const srcY = Math.round(mainCanvas.height/2 - (frameH/2+imgOffsetY)/imgScale);
+    const x = Math.max(0, Math.min(srcX, mainCanvas.width-cropPxW));
+    const y = Math.max(0, Math.min(srcY, mainCanvas.height-cropPxH));
+    const data = ctx.getImageData(x,y,cropPxW,cropPxH);
+    setCanvasSize(cropPxW,cropPxH);
     ctx.putImageData(data,0,0);
     hasSelection=false;
     syncResizeInputs();
     updateDims();
     cropRotationDeg = 0;
-    cropRect = rectForRatio(cropRatio);
-    renderCropFrame();
+    frameW = 0; frameH = 0; // force a fresh centered view next time crop opens
     updateRulerUI();
   }
   function cancelCropAction(){
     cancelEdit();
     cropRotationDeg = 0;
-    cropRect = rectForRatio(cropRatio);
-    renderCropFrame();
+    frameW = 0; frameH = 0;
     updateRulerUI();
   }
 
@@ -1608,6 +1684,7 @@
     beginEdit();
     onMenuOpen(id);
     document.body.classList.add('editing-mode');
+    document.body.classList.toggle('crop-editing', id==='group-crop');
   }
   // Visually closes whichever menu is active (deactivates its mobile tab /
   // collapses its desktop section) and returns the header/tab bar to normal.
@@ -1621,6 +1698,7 @@
       if(group) group.classList.add('collapsed');
     }
     document.body.classList.remove('editing-mode');
+    document.body.classList.remove('crop-editing');
     activeMenuId = null;
   }
   function applyActiveMenu(){
