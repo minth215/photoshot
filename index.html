@@ -197,24 +197,28 @@
     .stage-wrap{padding:10px;}
 
     aside#sidePanel{
-      width:100%;flex:0 0 auto;
+      width:100%;flex:0 1 auto;
+      display:flex;flex-direction:column;
       border-left:none;border-top:1px solid var(--line);
       padding:0;overflow:visible;background:var(--panel);
     }
     .mobile-tabbar{
+      order:2;flex:0 0 auto;
       display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;
       gap:2px;padding:4px 6px;
     }
     .mobile-tabbar::-webkit-scrollbar{height:3px;}
 
+    /* Panels take up real space (pushing/shrinking the image area above) instead
+       of floating over the image, so opening a taller panel visibly shrinks the
+       image to fit whatever room is left. */
     aside#sidePanel > .group{display:none;}
     aside#sidePanel > .group.mobile-active{
+      order:1;
       display:block;
-      position:absolute;left:0;right:0;bottom:var(--tabbar-h,56px);
-      max-height:48vh;overflow-y:auto;
+      max-height:60vh;overflow-y:auto;
       background:var(--panel);border-top:1px solid var(--line);
       margin:0;border-radius:0;border-left:none;border-right:none;border-bottom:none;
-      box-shadow:0 -10px 30px rgba(0,0,0,.45);z-index:15;
     }
     aside#sidePanel .group-body{display:flex!important;flex-direction:column;gap:10px;}
     aside#sidePanel .group > summary{pointer-events:none;}
@@ -496,11 +500,6 @@
     resetBtn.disabled = !hasHistory;
   }
 
-  function syncTabbarHeight(){
-    if(!mobileTabBar) return;
-    sidePanel.style.setProperty('--tabbar-h', mobileTabBar.offsetHeight+'px');
-  }
-
   const MAX_DIM = 1400;
 
   // mask canvas (detached, alpha channel = selection strength 0..255)
@@ -566,9 +565,13 @@
     applyCanvasDisplaySize();
   }
 
-  window.addEventListener('resize', ()=>{
+  // Re-fit whenever the visible image area's actual box size changes — a window
+  // resize, but also opening/closing/switching a mobile control panel, since those
+  // now push the image area rather than floating over it (so its available height
+  // varies by menu and the image should always fill whatever room is left).
+  new ResizeObserver(()=>{
     if(!userZoomed) fitToScreen();
-  });
+  }).observe(stageWrap);
 
   // ---------- File loading ----------
   fileInput.addEventListener('change', e=>{
@@ -589,7 +592,6 @@
       emptyState.style.display='none';
       canvasHolder.style.display='block';
       sidePanel.style.display='block';
-      syncTabbarHeight();
       downloadBtn.disabled=false;
       closeBtn.disabled=false;
       updateHistoryButtons();
@@ -1570,8 +1572,6 @@
 
   // ---------- Mobile bottom menu bar ----------
   if(mobileTabBar){
-    syncTabbarHeight();
-    window.addEventListener('resize', syncTabbarHeight);
     const tabButtons = mobileTabBar.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn=>{
       btn.addEventListener('click', ()=>{
