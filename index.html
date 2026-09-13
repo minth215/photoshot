@@ -1049,7 +1049,7 @@
     overlayCanvas.style.display='';
     cropRatio=null; cropRotationDeg=0;
     frameW=0; frameH=0; imgScale=1; imgOffsetX=0; imgOffsetY=0;
-    document.querySelectorAll('.ratio-btn').forEach(b=> b.classList.toggle('active', b.dataset.ratio==='free'));
+    document.querySelectorAll('#group-crop .ratio-btn').forEach(b=> b.classList.toggle('active', b.dataset.ratio==='free'));
     updateRulerUI();
     lockAspectOn = true;
     lockAspectToggle.classList.add('active');
@@ -1575,7 +1575,12 @@
       out.data[i]   = base[i]  *(1-a) + effect[i]  *a;
       out.data[i+1] = base[i+1]*(1-a) + effect[i+1]*a;
       out.data[i+2] = base[i+2]*(1-a) + effect[i+2]*a;
-      out.data[i+3] = base[i+3];
+      // The effect's own alpha channel matters too — a blur that softens a
+      // brush stroke's edge does that by spreading its ALPHA outward, not
+      // just its color. Keeping the original alpha here (as before) made the
+      // blur invisible at any hard-alpha edge, e.g. a draw layer's stroke
+      // against transparency.
+      out.data[i+3] = base[i+3]*(1-a) + effect[i+3]*a;
     }
     layer.ctx.putImageData(out,0,0);
     compositeLayers();
@@ -1727,9 +1732,9 @@
     overlayCanvas.style.display = '';
     fitToScreen();
   }
-  document.querySelectorAll('.ratio-btn').forEach(btn=>{
+  document.querySelectorAll('#group-crop .ratio-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      document.querySelectorAll('.ratio-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('#group-crop .ratio-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       const rv = btn.dataset.ratio;
       cropRatio = rv==='free' ? null : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
@@ -2004,6 +2009,32 @@
     out = boxBlurPass(out,w,h,radius);
     return out;
   }
+  // Blurring raw (unpremultiplied) RGB near a transparent edge — e.g. a draw
+  // layer's brush stroke against an empty background — averages in whatever
+  // color sits under fully-transparent neighbors (usually black), darkening
+  // the edge instead of just fading it out. Premultiplying first makes a
+  // transparent pixel's color contribution genuinely zero, and dividing back
+  // out by the (also blurred) alpha afterward recovers correct edge colors.
+  function premultiplyAlpha(src){
+    const out = new Uint8ClampedArray(src.length);
+    for(let i=0;i<src.length;i+=4){
+      const a = src[i+3]/255;
+      out[i]=src[i]*a; out[i+1]=src[i+1]*a; out[i+2]=src[i+2]*a; out[i+3]=src[i+3];
+    }
+    return out;
+  }
+  function unpremultiplyAlpha(src){
+    const out = new Uint8ClampedArray(src.length);
+    for(let i=0;i<src.length;i+=4){
+      const a = src[i+3];
+      if(a>0){
+        const f = 255/a;
+        out[i]=src[i]*f; out[i+1]=src[i+1]*f; out[i+2]=src[i+2]*f;
+      }
+      out[i+3]=a;
+    }
+    return out;
+  }
   function boxBlurAlpha(imgData,w,h,radius){
     const src = imgData.data;
     const alphaRGBA = new Uint8ClampedArray(src.length);
@@ -2024,7 +2055,7 @@
     const radius = parseInt(blurRange.value,10);
     const noiseAmt = parseInt(noiseRange.value,10);
     previewEffect((data,w,h)=>{
-      let result = radius>0 ? gaussianApprox(data,w,h,radius) : data;
+      let result = radius>0 ? unpremultiplyAlpha(gaussianApprox(premultiplyAlpha(data),w,h,radius)) : data;
       if(noiseAmt>0){
         result = new Uint8ClampedArray(result);
         for(let i=0;i<result.length;i+=4){
