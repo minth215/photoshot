@@ -2535,6 +2535,15 @@
   // ---------- Download ----------
   downloadBtn.addEventListener('click', ()=>{
     mainCanvas.toBlob(blob=>{
+      const file = new File([blob], 'edited-image.png', {type:'image/png'});
+      // On iOS Safari, a plain <a download> link opens a Quick Look preview
+      // page instead of saving — the user then has to tap the share icon and
+      // pick "이미지 저장" themselves. navigator.share() with a File opens
+      // that same share sheet directly, skipping the preview page entirely.
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        navigator.share({files:[file]}).catch(()=>{});
+        return;
+      }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'edited-image.png';
