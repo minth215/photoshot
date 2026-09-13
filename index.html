@@ -192,7 +192,7 @@
   .pct-box::after{content:'%';position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-dim);pointer-events:none;}
   .checkline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);}
   .toggle-btn{width:100%;}
-  #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;}
+  #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;width:100%;height:auto;display:block;touch-action:none;}
   footer{
     padding:8px 18px;border-top:1px solid var(--line);background:var(--panel);
     font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;flex-shrink:0;
@@ -481,7 +481,7 @@
     <details class="group collapsed" id="group-curve" open>
       <summary>곡선</summary>
       <div class="group-body">
-        <canvas id="curveCanvas" width="256" height="256"></canvas>
+        <canvas id="curveCanvas" width="256" height="130"></canvas>
         <div class="btnrow">
           <button id="resetCurveBtn" class="ghost">곡선 초기화</button>
         </div>
@@ -1648,15 +1648,42 @@
   // ---------- Curves ----------
   const curveCanvas = document.getElementById('curveCanvas');
   const cctx = curveCanvas.getContext('2d');
+  const CURVE_W = curveCanvas.width, CURVE_H = curveCanvas.height;
   let curvePoints = [[0,0],[255,255]];
   let draggingPointIdx = -1;
 
-  function curveToScreen(p){ return [p[0], 255-p[1]]; }
-  function screenToCurve(x,y){ return [Math.min(255,Math.max(0,x)), Math.min(255,Math.max(0,255-y))]; }
+  // Curve-value space is always 0..255 on both axes; screen space is the
+  // canvas's own (possibly non-square) pixel buffer, CURVE_W × CURVE_H.
+  function curveToScreen(p){ return [p[0]*(CURVE_W/255), CURVE_H-(p[1]/255)*CURVE_H]; }
+  function screenToCurve(x,y){
+    return [
+      Math.min(255,Math.max(0, x*(255/CURVE_W))),
+      Math.min(255,Math.max(0, 255-(y/CURVE_H)*255))
+    ];
+  }
+  // The canvas is displayed at width:100% (CSS size can differ from its
+  // CURVE_W×CURVE_H pixel buffer), so pointer coordinates need the same
+  // buffer/rect scale correction canvasPos() already applies for the main image.
+  function curvePointerPos(e){
+    const rect = curveCanvas.getBoundingClientRect();
+    const scaleX = curveCanvas.width/rect.width;
+    const scaleY = curveCanvas.height/rect.height;
+    return [ (e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY ];
+  }
 
   function buildLUT(){
     const pts = [...curvePoints].sort((a,b)=>a[0]-b[0]);
     const lut = new Uint8ClampedArray(256);
+    // With only the two default endpoints, stay a straight line (no curvature)
+    // until the user actually adds a third point to bend it.
+    if(pts.length<=2){
+      const [x0,y0]=pts[0], [x1,y1]=pts[pts.length-1];
+      for(let x=0;x<256;x++){
+        const t = x1===x0 ? 0 : Math.min(1,Math.max(0,(x-x0)/(x1-x0)));
+        lut[x] = y0 + (y1-y0)*t;
+      }
+      return lut;
+    }
     for(let x=0;x<256;x++){
       let i=0;
       while(i<pts.length-2 && pts[i+1][0]<x) i++;
@@ -1671,12 +1698,13 @@
     return lut;
   }
   function drawCurveEditor(){
-    cctx.clearRect(0,0,256,256);
-    cctx.fillStyle='#101214'; cctx.fillRect(0,0,256,256);
+    cctx.clearRect(0,0,CURVE_W,CURVE_H);
+    cctx.fillStyle='#101214'; cctx.fillRect(0,0,CURVE_W,CURVE_H);
     cctx.strokeStyle='#2c3137'; cctx.lineWidth=1;
     for(let i=1;i<4;i++){
-      cctx.beginPath(); cctx.moveTo(i*64,0); cctx.lineTo(i*64,256); cctx.stroke();
-      cctx.beginPath(); cctx.moveTo(0,i*64); cctx.lineTo(256,i*64); cctx.stroke();
+      const gx=i*CURVE_W/4, gy=i*CURVE_H/4;
+      cctx.beginPath(); cctx.moveTo(gx,0); cctx.lineTo(gx,CURVE_H); cctx.stroke();
+      cctx.beginPath(); cctx.moveTo(0,gy); cctx.lineTo(CURVE_W,gy); cctx.stroke();
     }
     const lut = buildLUT();
     cctx.strokeStyle='#4fd1c5'; cctx.lineWidth=2;
@@ -1695,6 +1723,7 @@
   }
   function runCurvePreview(){
     beginEdit();
+    sessionDirty = true;
     const lut = drawCurveEditor();
     previewEffect((data)=>{
       for(let i=0;i<data.length;i+=4){
@@ -1704,9 +1733,8 @@
     });
   }
   curveCanvas.addEventListener('pointerdown', e=>{
-    const rect = curveCanvas.getBoundingClientRect();
-    const x = e.clientX-rect.left, y = e.clientY-rect.top;
-    let found=-1, best=12;
+    const [x,y] = curvePointerPos(e);
+    let found=-1, best=16;
     curvePoints.forEach((p,idx)=>{
       const [sx,sy]=curveToScreen(p);
       const d = Math.hypot(sx-x,sy-y);
@@ -1721,29 +1749,43 @@
     curveCanvas.setPointerCapture(e.pointerId);
     runCurvePreview();
   });
+  // The two edge anchors (x=0 and x=255) must stay identified by VALUE, not by
+  // array position — a newly added point is always pushed to the end of
+  // curvePoints, so "last index" stops meaning "the right edge" the moment a
+  // third point exists. Using the current min/max-x indices keeps the real
+  // endpoints x-locked regardless of insertion order.
+  function curveEdgeIndices(){
+    let minIdx=0, maxIdx=0;
+    curvePoints.forEach((p,idx)=>{
+      if(p[0]<curvePoints[minIdx][0]) minIdx=idx;
+      if(p[0]>curvePoints[maxIdx][0]) maxIdx=idx;
+    });
+    return [minIdx, maxIdx];
+  }
   curveCanvas.addEventListener('pointermove', e=>{
     if(draggingPointIdx<0) return;
-    const rect = curveCanvas.getBoundingClientRect();
-    const x = e.clientX-rect.left, y = e.clientY-rect.top;
+    const [x,y] = curvePointerPos(e);
     const [cx,cy] = screenToCurve(x,y);
-    if(draggingPointIdx===0) curvePoints[0]=[0,cy];
-    else if(draggingPointIdx===curvePoints.length-1 && curvePoints.length>1) curvePoints[draggingPointIdx]=[255,cy];
+    const [minIdx,maxIdx] = curveEdgeIndices();
+    if(draggingPointIdx===minIdx) curvePoints[draggingPointIdx]=[0,cy];
+    else if(draggingPointIdx===maxIdx) curvePoints[draggingPointIdx]=[255,cy];
     else curvePoints[draggingPointIdx]=[cx,cy];
     runCurvePreview();
   });
   curveCanvas.addEventListener('pointerup', ()=>{ draggingPointIdx=-1; });
   curveCanvas.addEventListener('dblclick', e=>{
     if(curvePoints.length<=2) return;
-    const rect = curveCanvas.getBoundingClientRect();
-    const x = e.clientX-rect.left, y = e.clientY-rect.top;
-    let found=-1, best=12;
+    const [x,y] = curvePointerPos(e);
+    let found=-1, best=16;
     curvePoints.forEach((p,idx)=>{
       const [sx,sy]=curveToScreen(p);
       const d = Math.hypot(sx-x,sy-y);
       if(d<best){best=d;found=idx;}
     });
-    if(found>0 && found<curvePoints.length-1){
+    const [minIdx,maxIdx] = curveEdgeIndices();
+    if(found>=0 && found!==minIdx && found!==maxIdx){
       curvePoints.splice(found,1);
+      sessionDirty = true;
       runCurvePreview();
     }
   });
