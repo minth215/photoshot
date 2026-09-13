@@ -135,6 +135,46 @@
   }
   .empty-state button{margin-top:10px;}
 
+  /* ---------- Layers (bookmark tab + flyout panel) ---------- */
+  .layer-tab-btn{
+    position:absolute;top:14px;right:0;z-index:31;
+    width:44px;height:38px;padding:0;
+    display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--line);border-right:none;
+    border-radius:8px 0 0 8px;color:var(--text);
+    box-shadow:-2px 2px 8px rgba(0,0,0,.35);
+  }
+  .layer-tab-btn svg{width:19px;height:19px;}
+  .layer-tab-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
+  .layer-panel{
+    position:absolute;top:58px;right:0;z-index:30;
+    width:250px;max-width:calc(100% - 12px);max-height:min(60vh,420px);
+    display:flex;flex-direction:column;overflow:hidden;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    box-shadow:-2px 4px 16px rgba(0,0,0,.45);
+  }
+  .layer-panel.collapsed{display:none;}
+  .layer-panel-header{padding:9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);}
+  .layer-list{overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:4px;}
+  .layer-row{
+    display:grid;grid-template-columns:28px 1fr auto auto;grid-template-rows:auto auto;
+    align-items:center;column-gap:8px;row-gap:4px;
+    padding:6px 8px;border-radius:6px;border:1px solid transparent;
+    background:var(--panel-2);touch-action:none;
+  }
+  .layer-row.selected{border-color:var(--accent);background:rgba(79,209,197,.1);}
+  .layer-row.dragging{opacity:.55;}
+  .layer-thumb{grid-row:1;grid-column:1;width:28px;height:28px;border-radius:4px;background:#000;border:1px solid var(--line);}
+  .layer-name{grid-row:1;grid-column:2;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .layer-icon-btn{grid-row:1;width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
+  .layer-icon-btn svg{width:16px;height:16px;}
+  .layer-icon-btn.off{color:var(--text-dim);opacity:.4;}
+  .layer-icon-btn.on{color:var(--accent);opacity:1;}
+  .layer-opacity-row{grid-row:2;grid-column:1 / -1;display:flex;align-items:center;gap:6px;}
+  .layer-opacity-row input[type=range]{flex:1;height:14px;}
+  .layer-opacity-row span{font-family:var(--mono);font-size:10px;color:var(--text-dim);width:30px;text-align:right;}
+  input[type=color]{width:100%;height:34px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:5px;cursor:pointer;}
+
   aside{
     width:320px;flex-shrink:0;
     background:var(--panel);
@@ -300,11 +340,22 @@
         </div>
       </div>
     </div>
+    <button id="layerToggleBtn" class="layer-tab-btn" type="button" title="레이어" aria-label="레이어" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 21 7 12 12 3 7"/><polyline points="3 12 12 17 21 12"/><polyline points="3 17 12 22 21 17"/></svg>
+    </button>
+    <div class="layer-panel collapsed" id="layerPanel">
+      <div class="layer-panel-header">레이어</div>
+      <div class="layer-list" id="layerList"></div>
+    </div>
   </div>
 
   <aside id="sidePanel" style="display:none;">
 
     <nav class="mobile-tabbar" id="mobileTabBar">
+      <button class="tab-btn" type="button" data-target="group-draw">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        <span>그리기</span>
+      </button>
       <button class="tab-btn" type="button" data-target="group-selection">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
         <span>선택영역</span>
@@ -334,6 +385,31 @@
         <span>곡선</span>
       </button>
     </nav>
+
+    <details class="group collapsed" id="group-draw" open>
+      <summary>그리기</summary>
+      <div class="group-body">
+        <label class="field"><span class="row"><span>색상</span></span>
+          <input type="color" id="drawColor" value="#4fd1c5">
+        </label>
+        <div class="ratio-row">
+          <button class="ratio-btn active" type="button" data-brushtype="round">원형</button>
+          <button class="ratio-btn" type="button" data-brushtype="square">사각형</button>
+        </div>
+        <label class="field">
+          <span class="row"><span>브러쉬 크기</span><span id="drawSizeVal">30</span></span>
+          <input type="range" id="drawSize" min="1" max="200" value="30">
+        </label>
+        <label class="field">
+          <span class="row"><span>경도</span><span id="drawHardnessVal">80</span></span>
+          <input type="range" id="drawHardness" min="0" max="100" value="80">
+        </label>
+        <label class="field">
+          <span class="row"><span>노출</span><span id="drawExposureVal">100</span></span>
+          <input type="range" id="drawExposure" min="1" max="100" value="100">
+        </label>
+      </div>
+    </details>
 
     <details class="group collapsed" id="group-selection" open>
       <summary>선택 영역</summary>
@@ -516,6 +592,9 @@
   const menuCancelBtn = document.getElementById('menuCancelBtn');
   const menuApplyBtn = document.getElementById('menuApplyBtn');
   const headerCropSize = document.getElementById('headerCropSize');
+  const layerToggleBtn = document.getElementById('layerToggleBtn');
+  const layerPanel = document.getElementById('layerPanel');
+  const layerList = document.getElementById('layerList');
 
   function updateHistoryButtons(){
     undoBtn.disabled = undoStack.length===0;
@@ -524,7 +603,9 @@
 
   const MAX_DIM = 1400;
 
-  // mask canvas (detached, alpha channel = selection strength 0..255)
+  // mask canvas (detached, alpha channel = selection strength 0..255) — the
+  // selection is a single document-wide mask shared by every layer, not
+  // per-layer data.
   const maskCanvas = document.createElement('canvas');
   const mctx = maskCanvas.getContext('2d', {willReadFrequently:true});
   let hasSelection = false;
@@ -533,7 +614,184 @@
   let undoStack = [];
   let redoStack = [];
 
-  let editingSnapshot = null; // ImageData taken before a live-preview edit begins
+  let editingSnapshot = null; // full-document snapshot taken before a live-preview edit begins
+
+  // ---------- Layers ----------
+  // Each layer owns its own full-size offscreen canvas; mainCanvas holds only
+  // the composited result and is never drawn into directly except by
+  // compositeLayers(). Layer order in the array is bottom-to-top.
+  let layers = [];
+  let activeLayerId = null;
+  let nextLayerId = 1;
+
+  function makeLayerCanvas(w,h){
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    return { canvas, ctx: canvas.getContext('2d', {willReadFrequently:true}) };
+  }
+  function createLayer(name, w, h){
+    const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
+    return { id: nextLayerId++, name, canvas, ctx: lctx, visible:true, locked:false, opacity:1 };
+  }
+  // Creates a layer at (w,h) copying id/name/visible/locked/opacity from a
+  // snapshot entry, but leaves its canvas blank — for callers that are about
+  // to draw scaled/rotated/cropped content into it themselves.
+  function layerShellFromSnapshot(ls, w, h){
+    const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
+    return { id: ls.id, name: ls.name, canvas, ctx: lctx, visible: ls.visible, locked: ls.locked, opacity: ls.opacity };
+  }
+  function layerFromSnapshot(ls, w, h){
+    const layer = layerShellFromSnapshot(ls, w, h);
+    layer.ctx.putImageData(ls.img, 0, 0);
+    return layer;
+  }
+  function activeLayer(){
+    return layers.find(l => l.id===activeLayerId) || layers[layers.length-1] || null;
+  }
+  function compositeLayers(){
+    ctx.clearRect(0,0,mainCanvas.width,mainCanvas.height);
+    layers.forEach(l=>{
+      if(!l.visible) return;
+      ctx.globalAlpha = l.opacity;
+      ctx.drawImage(l.canvas,0,0);
+    });
+    ctx.globalAlpha = 1;
+  }
+  function selectLayer(id){
+    if(id===activeLayerId) return;
+    activeLayerId = id;
+    renderLayerPanel();
+  }
+  function svgEye(open){
+    return open
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.6 21.6 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a21.6 21.6 0 0 1-2.68 3.9M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  }
+  function svgLock(locked){
+    return locked
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.5-2.2"/></svg>';
+  }
+  // Press-and-hold (not a quick tap) on a layer row starts a drag that
+  // reorders layers by z-index as the row crosses its neighbors.
+  function attachLayerDrag(row, layer){
+    const HOLD_MS = 260, MOVE_CANCEL_PX = 8;
+    let holdTimer = null, dragging = false, startY = 0, preDragSnapshot = null;
+    function onDown(e){
+      if(e.target.closest('.layer-icon-btn,.layer-opacity-row')) return;
+      startY = e.clientY;
+      holdTimer = setTimeout(()=>{
+        holdTimer = null;
+        dragging = true;
+        preDragSnapshot = snapshotState();
+        row.classList.add('dragging');
+        try{ row.setPointerCapture(e.pointerId); }catch(err){}
+      }, HOLD_MS);
+    }
+    function onMove(e){
+      if(dragging){
+        const rows = [...layerList.querySelectorAll('.layer-row')];
+        const idx = rows.indexOf(row);
+        const y = e.clientY;
+        for(let i=0;i<rows.length;i++){
+          if(rows[i]===row) continue;
+          const r = rows[i].getBoundingClientRect();
+          const mid = r.top + r.height/2;
+          if((i<idx && y<mid) || (i>idx && y>mid)){
+            layerList.insertBefore(row, i<idx ? rows[i] : rows[i].nextSibling);
+            const newTopToBottomIds = [...layerList.querySelectorAll('.layer-row')].map(r2=>parseInt(r2.dataset.layerId,10));
+            const idToLayer = new Map(layers.map(l=>[l.id,l]));
+            layers = newTopToBottomIds.slice().reverse().map(id=>idToLayer.get(id));
+            compositeLayers();
+            break;
+          }
+        }
+        return;
+      }
+      if(holdTimer && Math.abs(e.clientY-startY) > MOVE_CANCEL_PX){
+        clearTimeout(holdTimer); holdTimer=null;
+      }
+    }
+    function onUp(e){
+      if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+      if(dragging){
+        dragging = false;
+        if(preDragSnapshot) pushUndo(preDragSnapshot);
+        preDragSnapshot = null;
+        renderLayerPanel();
+      }
+    }
+    row.addEventListener('pointerdown', onDown);
+    row.addEventListener('pointermove', onMove);
+    row.addEventListener('pointerup', onUp);
+    row.addEventListener('pointercancel', onUp);
+  }
+  function renderLayerPanel(){
+    layerList.innerHTML = '';
+    // Top of the visual list = top of the stack, i.e. reverse of storage order.
+    for(let i=layers.length-1; i>=0; i--){
+      const layer = layers[i];
+      const row = document.createElement('div');
+      row.className = 'layer-row' + (layer.id===activeLayerId ? ' selected' : '');
+      row.dataset.layerId = layer.id;
+      row.innerHTML =
+        '<canvas class="layer-thumb"></canvas>' +
+        '<span class="layer-name"></span>' +
+        '<button type="button" class="layer-icon-btn layer-eye" title="표시/숨기기" aria-label="표시/숨기기"></button>' +
+        '<button type="button" class="layer-icon-btn layer-lock" title="잠금" aria-label="잠금"></button>' +
+        '<div class="layer-opacity-row"><input type="range" class="layer-opacity" min="0" max="100"><span class="layer-opacity-val"></span></div>';
+      row.querySelector('.layer-name').textContent = layer.name;
+      const eyeBtn = row.querySelector('.layer-eye');
+      eyeBtn.innerHTML = svgEye(layer.visible);
+      eyeBtn.classList.toggle('off', !layer.visible);
+      const lockBtn = row.querySelector('.layer-lock');
+      lockBtn.innerHTML = svgLock(layer.locked);
+      lockBtn.classList.toggle('on', layer.locked);
+      const opacityInput = row.querySelector('.layer-opacity');
+      opacityInput.value = Math.round(layer.opacity*100);
+      row.querySelector('.layer-opacity-val').textContent = Math.round(layer.opacity*100)+'%';
+      layerList.appendChild(row);
+
+      const thumb = row.querySelector('.layer-thumb');
+      thumb.width = 28; thumb.height = 28;
+      const tctx = thumb.getContext('2d');
+      tctx.fillStyle = '#000'; tctx.fillRect(0,0,28,28);
+      if(layer.canvas.width && layer.canvas.height) tctx.drawImage(layer.canvas,0,0,28,28);
+
+      row.addEventListener('click', e=>{
+        if(e.target.closest('.layer-icon-btn,.layer-opacity-row')) return;
+        selectLayer(layer.id);
+      });
+      eyeBtn.addEventListener('click', e=>{
+        e.stopPropagation();
+        pushUndo(snapshotState());
+        layer.visible = !layer.visible;
+        compositeLayers();
+        renderLayerPanel();
+      });
+      lockBtn.addEventListener('click', e=>{
+        e.stopPropagation();
+        pushUndo(snapshotState());
+        layer.locked = !layer.locked;
+        renderLayerPanel();
+      });
+      let opacityPreDrag = null;
+      opacityInput.addEventListener('pointerdown', e=>{ e.stopPropagation(); opacityPreDrag = snapshotState(); });
+      opacityInput.addEventListener('input', ()=>{
+        layer.opacity = parseInt(opacityInput.value,10)/100;
+        row.querySelector('.layer-opacity-val').textContent = opacityInput.value+'%';
+        compositeLayers();
+      });
+      opacityInput.addEventListener('change', ()=>{
+        if(opacityPreDrag){ pushUndo(opacityPreDrag); opacityPreDrag=null; }
+      });
+      attachLayerDrag(row, layer);
+    }
+  }
+  layerToggleBtn.addEventListener('click', ()=>{
+    layerPanel.classList.toggle('collapsed');
+    layerToggleBtn.classList.toggle('active', !layerPanel.classList.contains('collapsed'));
+  });
 
   function setCanvasSize(w,h){
     const dimsChanged = (mainCanvas.width!==w || mainCanvas.height!==h);
@@ -632,31 +890,44 @@
       const scale = Math.min(1, MAX_DIM / Math.max(w,h));
       w = Math.round(w*scale); h = Math.round(h*scale);
       setCanvasSize(w,h);
-      ctx.clearRect(0,0,w,h);
-      ctx.drawImage(img,0,0,w,h);
+      nextLayerId = 1;
+      const baseLayer = createLayer('배경', w, h);
+      baseLayer.ctx.drawImage(img,0,0,w,h);
+      layers = [baseLayer];
+      activeLayerId = baseLayer.id;
       hasSelection = false;
       undoStack = [];
       redoStack = [];
       emptyState.style.display='none';
       canvasHolder.style.display='block';
       sidePanel.style.display='block';
-      downloadBtn.disabled=false;
-      closeBtn.disabled=false;
+      layerToggleBtn.style.display='flex';
       updateHistoryButtons();
       syncResizeInputs();
       updateDims();
+      compositeLayers();
       renderSelectionOverlay();
+      renderLayerPanel();
       URL.revokeObjectURL(url);
       setTool('none');
+      downloadBtn.disabled=false;
+      closeBtn.disabled=false;
     };
     img.src = url;
   });
 
   // ---------- Undo ----------
+  // A snapshot captures the WHOLE document: every layer's pixels plus its
+  // visibility/lock/opacity/order, the active layer, and the shared selection
+  // mask — since any of these (not just pixel edits) can be undone.
   function snapshotState(){
     return {
       w: mainCanvas.width, h: mainCanvas.height,
-      img: ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height),
+      layers: layers.map(l => ({
+        id:l.id, name:l.name, visible:l.visible, locked:l.locked, opacity:l.opacity,
+        img: l.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height)
+      })),
+      activeLayerId,
       mask: mctx.getImageData(0,0,mainCanvas.width,mainCanvas.height),
       hasSelection
     };
@@ -671,11 +942,14 @@
   }
   function restoreState(s){
     setCanvasSize(s.w,s.h);
-    ctx.putImageData(s.img,0,0);
+    layers = s.layers.map(ls => layerFromSnapshot(ls, s.w, s.h));
+    activeLayerId = s.activeLayerId;
     mctx.putImageData(s.mask,0,0);
     hasSelection = s.hasSelection;
     updateDims();
+    compositeLayers();
     renderSelectionOverlay();
+    renderLayerPanel();
   }
   // 실행 취소 (undo) and 되돌리기 (redo) walk the same history in opposite
   // directions: undo pops the last state off undoStack and parks the current
@@ -707,6 +981,11 @@
     undoStack=[];
     redoStack=[];
     editingSnapshot=null;
+    layers=[]; activeLayerId=null; drawLayerForSession=null;
+    layerPanel.classList.add('collapsed');
+    layerToggleBtn.classList.remove('active');
+    layerToggleBtn.style.display='none';
+    layerList.innerHTML='';
     viewScale=1; userZoomed=false;
     lassoPoints=[]; dragStart=null; brushDrawing=false;
     setTool('none');
@@ -871,6 +1150,90 @@
     if(!subtract) hasSelection = true;
   }
 
+  // ---------- Draw tool (그리기): paints onto a brand-new top layer ----------
+  const drawColorInput = document.getElementById('drawColor');
+  const drawSizeInput = document.getElementById('drawSize');
+  const drawHardnessInput = document.getElementById('drawHardness');
+  const drawExposureInput = document.getElementById('drawExposure');
+  let drawBrushType = 'round';
+  document.querySelectorAll('#group-draw .ratio-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#group-draw .ratio-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      drawBrushType = btn.dataset.brushtype;
+    });
+  });
+  drawSizeInput.addEventListener('input', ()=>{ document.getElementById('drawSizeVal').textContent = drawSizeInput.value; });
+  drawHardnessInput.addEventListener('input', ()=>{ document.getElementById('drawHardnessVal').textContent = drawHardnessInput.value; });
+  drawExposureInput.addEventListener('input', ()=>{ document.getElementById('drawExposureVal').textContent = drawExposureInput.value; });
+
+  function hexToRgb(hex){
+    const m = /^#([0-9a-f]{6})$/i.exec(hex||'');
+    const n = m ? parseInt(m[1],16) : 0x4fd1c5;
+    return [ (n>>16)&255, (n>>8)&255, n&255 ];
+  }
+
+  // One new top layer is created on the first stroke of each 그리기 session
+  // (opening the menu again later creates another) — cancelling the session
+  // discards it automatically since restoreState() rebuilds `layers` from the
+  // pre-session snapshot, which never included it.
+  let drawLayerForSession = null;
+  let drawingActive = false;
+  let lastDrawPos = null;
+
+  function ensureDrawLayer(){
+    if(drawLayerForSession) return drawLayerForSession;
+    const layer = createLayer('그리기 레이어', mainCanvas.width, mainCanvas.height);
+    layers.push(layer);
+    activeLayerId = layer.id;
+    drawLayerForSession = layer;
+    renderLayerPanel();
+    return layer;
+  }
+  function paintDrawDab(x,y){
+    if(!editingSnapshot) return;
+    sessionDirty = true;
+    const layer = ensureDrawLayer();
+    const size = parseInt(drawSizeInput.value,10);
+    const hardness = parseInt(drawHardnessInput.value,10)/100;
+    const exposure = parseInt(drawExposureInput.value,10)/100;
+    const r = size/2;
+    const [rr,gg,bb] = hexToRgb(drawColorInput.value);
+    const lctx = layer.ctx;
+    lctx.save();
+    lctx.globalAlpha = exposure;
+    if(drawBrushType==='square'){
+      lctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      lctx.fillRect(x-r, y-r, size, size);
+    } else {
+      const grad = lctx.createRadialGradient(x,y,Math.max(0,r*hardness),x,y,r);
+      grad.addColorStop(0, `rgba(${rr},${gg},${bb},1)`);
+      grad.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
+      lctx.fillStyle = grad;
+      lctx.beginPath(); lctx.arc(x,y,r,0,Math.PI*2); lctx.fill();
+    }
+    lctx.restore();
+    compositeLayers();
+  }
+  function paintDrawLine(x1,y1,x2,y2){
+    const size = parseInt(drawSizeInput.value,10);
+    const dist = Math.hypot(x2-x1,y2-y1);
+    const step = Math.max(1, size/4);
+    const n = Math.max(1, Math.floor(dist/step));
+    for(let i=1;i<=n;i++){
+      const t = i/n;
+      paintDrawDab(x1+(x2-x1)*t, y1+(y2-y1)*t);
+    }
+  }
+  function applyDrawAction(){
+    commitEdit();
+    drawLayerForSession = null;
+  }
+  function cancelDrawAction(){
+    cancelEdit();
+    drawLayerForSession = null;
+  }
+
   // ---------- Pinch to zoom + rotate (two fingers) ----------
   const activePointers = new Map(); // pointerId -> {x,y} in client coords
   let pinchActive = false;
@@ -898,6 +1261,8 @@
     // a second finger cancels any in-progress single-finger tool action
     lassoPoints = [];
     brushDrawing = false;
+    drawingActive = false;
+    lastDrawPos = null;
     dragStart = null;
     renderSelectionOverlay();
   }
@@ -937,6 +1302,11 @@
       brushDrawing = true;
       paintBrush(x,y,currentTool==='brush-sub');
       renderSelectionOverlay();
+    } else if(currentTool==='draw'){
+      beginEdit();
+      drawingActive = true;
+      lastDrawPos = [x,y];
+      paintDrawDab(x,y);
     }
   });
   overlayCanvas.addEventListener('pointermove', e=>{
@@ -951,6 +1321,9 @@
     } else if(brushDrawing && (currentTool==='brush-add'||currentTool==='brush-sub')){
       paintBrush(x,y,currentTool==='brush-sub');
       renderSelectionOverlay();
+    } else if(drawingActive && currentTool==='draw' && lastDrawPos){
+      paintDrawLine(lastDrawPos[0], lastDrawPos[1], x, y);
+      lastDrawPos = [x,y];
     }
   });
   function releasePointer(e){
@@ -984,9 +1357,18 @@
     if(currentTool==='brush-add'||currentTool==='brush-sub'){
       brushDrawing=false;
     }
+    if(currentTool==='draw'){
+      drawingActive=false;
+      lastDrawPos=null;
+    }
     dragStart=null;
   });
-  overlayCanvas.addEventListener('pointercancel', e=>{ endPeek(); releasePointer(e); });
+  overlayCanvas.addEventListener('pointercancel', e=>{
+    endPeek();
+    drawingActive=false;
+    lastDrawPos=null;
+    releasePointer(e);
+  });
 
   // ---------- Resize ----------
   const resizeW = document.getElementById('resizeW'), resizeH = document.getElementById('resizeH');
@@ -1004,20 +1386,28 @@
     aspect = mainCanvas.width/mainCanvas.height;
   }
   // Resizing now live-previews (like the other adjustment menus) instead of
-  // applying immediately — the header's 적용/취소 commits or discards it.
+  // applying immediately — the header's 적용/취소 commits or discards it. Every
+  // call rebuilds all layers fresh from editingSnapshot (never from the result
+  // of a previous call), so repeated slider drags don't compound scaling loss.
   function previewResize(w,h){
     beginEdit();
     if(!editingSnapshot) return;
     sessionDirty = true;
     const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
-    const tmp = document.createElement('canvas');
-    tmp.width = baseW; tmp.height = baseH;
-    tmp.getContext('2d').putImageData(editingSnapshot.img, 0, 0);
     setCanvasSize(w,h);
-    ctx.clearRect(0,0,w,h);
-    ctx.drawImage(tmp, 0,0,baseW,baseH, 0,0,w,h);
+    layers = editingSnapshot.layers.map(ls=>{
+      const layer = layerShellFromSnapshot(ls, w, h);
+      const tmp = document.createElement('canvas');
+      tmp.width = baseW; tmp.height = baseH;
+      tmp.getContext('2d').putImageData(ls.img, 0, 0);
+      layer.ctx.drawImage(tmp, 0,0,baseW,baseH, 0,0,w,h);
+      return layer;
+    });
+    activeLayerId = editingSnapshot.activeLayerId;
     hasSelection=false;
     updateDims();
+    compositeLayers();
+    renderLayerPanel();
   }
   resizeW.addEventListener('input', ()=>{
     const w = Math.max(1, parseInt(resizeW.value||1,10));
@@ -1052,13 +1442,21 @@
     editingSnapshot = snapshotState();
     sessionDirty = false;
   }
+  // Effects/selective color/levels/curve only ever touch the ACTIVE layer's
+  // pixels — everything else in the document stays exactly as it was.
   function previewEffect(effectFn){
     if(!editingSnapshot) return;
+    // Key off the layer that was active when this session began, not whatever
+    // is active right now — the layer panel can still be clicked mid-session.
+    const layer = layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layer || layer.locked) return;
+    const layerSnap = editingSnapshot.layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layerSnap) return;
     sessionDirty = true;
     const w=editingSnapshot.w, h=editingSnapshot.h;
-    const base = new Uint8ClampedArray(editingSnapshot.img.data);
+    const base = new Uint8ClampedArray(layerSnap.img.data);
     const effect = effectFn(new Uint8ClampedArray(base), w, h);
-    const out = ctx.createImageData(w,h);
+    const out = new ImageData(w,h);
     const alphaAll = hasSelection ? mctx.getImageData(0,0,w,h).data : null;
     for(let i=0;i<base.length;i+=4){
       const a = alphaAll ? alphaAll[i+3]/255 : 1;
@@ -1067,7 +1465,8 @@
       out.data[i+2] = base[i+2]*(1-a) + effect[i+2]*a;
       out.data[i+3] = base[i+3];
     }
-    ctx.putImageData(out,0,0);
+    layer.ctx.putImageData(out,0,0);
+    compositeLayers();
   }
   // Press-and-hold on the image (효과/선택색상/레벨/곡선 only, once something's
   // actually changed) shows the image as it was before this menu's edits, so
@@ -1080,15 +1479,21 @@
   }
   function startPeek(){
     if(isPeeking || !canPeek()) return;
+    const layer = layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    const layerSnap = editingSnapshot.layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layer || !layerSnap) return;
     isPeeking = true;
-    peekAfterImage = ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height);
-    ctx.putImageData(editingSnapshot.img,0,0);
+    peekAfterImage = layer.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height);
+    layer.ctx.putImageData(layerSnap.img,0,0);
+    compositeLayers();
   }
   function endPeek(){
     if(!isPeeking) return;
     isPeeking = false;
-    if(peekAfterImage) ctx.putImageData(peekAfterImage,0,0);
+    const layer = editingSnapshot && layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(layer && peekAfterImage) layer.ctx.putImageData(peekAfterImage,0,0);
     peekAfterImage = null;
+    compositeLayers();
   }
   function commitEdit(){
     if(!editingSnapshot) return;
@@ -1343,15 +1748,22 @@
     const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
     const {w:newW, h:newH} = rotatedBounds(baseW, baseH, deg);
     setCanvasSize(newW, newH);
-    const tmp = document.createElement('canvas');
-    tmp.width = baseW; tmp.height = baseH;
-    tmp.getContext('2d').putImageData(editingSnapshot.img, 0, 0);
-    ctx.save();
-    ctx.clearRect(0,0,newW,newH);
-    ctx.translate(newW/2, newH/2);
-    ctx.rotate(deg*Math.PI/180);
-    ctx.drawImage(tmp, -baseW/2, -baseH/2);
-    ctx.restore();
+    // Rebuilt fresh from editingSnapshot each call (same reasoning as
+    // previewResize) so every layer rotates from its original pixels, not a
+    // resampled result of the previous angle.
+    layers = editingSnapshot.layers.map(ls=>{
+      const layer = layerShellFromSnapshot(ls, newW, newH);
+      const tmp = document.createElement('canvas');
+      tmp.width = baseW; tmp.height = baseH;
+      tmp.getContext('2d').putImageData(ls.img, 0, 0);
+      layer.ctx.save();
+      layer.ctx.translate(newW/2, newH/2);
+      layer.ctx.rotate(deg*Math.PI/180);
+      layer.ctx.drawImage(tmp, -baseW/2, -baseH/2);
+      layer.ctx.restore();
+      return layer;
+    });
+    activeLayerId = editingSnapshot.activeLayerId;
     // The frame itself never changes from a rotation — only the image's own pixel
     // bounds grew, so the zoom/pan just need re-clamping against the new size.
     if(cropModeActive){
@@ -1360,6 +1772,8 @@
       renderCropFrame();
     }
     updateRulerUI();
+    compositeLayers();
+    renderLayerPanel();
   }
   function updateRulerUI(){
     rotateRulerTrack.style.transform = 'translateX(' + (-cropRotationDeg*PX_PER_DEG) + 'px)';
@@ -1402,15 +1816,21 @@
     const srcY = Math.round(mainCanvas.height/2 - (frameH/2+imgOffsetY)/imgScale);
     const x = Math.max(0, Math.min(srcX, mainCanvas.width-cropPxW));
     const y = Math.max(0, Math.min(srcY, mainCanvas.height-cropPxH));
-    const data = ctx.getImageData(x,y,cropPxW,cropPxH);
+    const oldLayers = layers;
+    layers = oldLayers.map(l=>{
+      const {canvas, ctx:lctx} = makeLayerCanvas(cropPxW, cropPxH);
+      lctx.drawImage(l.canvas, x,y,cropPxW,cropPxH, 0,0,cropPxW,cropPxH);
+      return { id:l.id, name:l.name, canvas, ctx:lctx, visible:l.visible, locked:l.locked, opacity:l.opacity };
+    });
     setCanvasSize(cropPxW,cropPxH);
-    ctx.putImageData(data,0,0);
     hasSelection=false;
     syncResizeInputs();
     updateDims();
     cropRotationDeg = 0;
     frameW = 0; frameH = 0; // force a fresh centered view next time crop opens
     updateRulerUI();
+    compositeLayers();
+    renderLayerPanel();
   }
   function cancelCropAction(){
     cancelEdit();
@@ -1836,6 +2256,7 @@
   // directly (lasso for selection); menus that don't touch the canvas arm 'none'.
   // 크롭 is handled separately since it shows/hides the crop-frame overlay, not a tool.
   const MENU_TOOL = {
+    'group-draw': 'draw',
     'group-selection': 'lasso',
     'group-resize': 'none',
     'group-effects': 'none',
@@ -1850,6 +2271,7 @@
     } else {
       if(id==='group-resize') syncResizeInputs();
       if(id==='group-sc') syncSCInputs();
+      if(id==='group-draw') drawLayerForSession = null;
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
     }
@@ -1861,6 +2283,7 @@
   // Every menu commits/discards as one bundled undo step via the header's
   // 적용/취소, instead of each panel having its own apply/cancel buttons.
   const MENU_SESSION = {
+    'group-draw': { commit: applyDrawAction, cancel: cancelDrawAction },
     'group-selection': { commit: commitEdit, cancel: cancelEdit },
     'group-crop': { commit: applyCropAction, cancel: cancelCropAction },
     'group-resize': { commit: applyResizeAction, cancel: cancelResizeAction },
