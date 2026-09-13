@@ -889,6 +889,7 @@
     return Math.atan2(pts[1].y-pts[0].y, pts[1].x-pts[0].x) * 180/Math.PI;
   }
   function startPinch(){
+    endPeek(); // a second finger joining a before/after peek should zoom, not stay peeked
     pinchActive = true;
     pinchStartDist = pointerDistance();
     pinchStartScale = cropModeActive ? imgScale : viewScale;
@@ -924,7 +925,10 @@
     try{ overlayCanvas.setPointerCapture(e.pointerId); }catch(err){}
     activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(activePointers.size>=2){ startPinch(); return; }
-    if(currentTool==='none') return;
+    if(currentTool==='none'){
+      startPeek();
+      return;
+    }
     const [x,y] = canvasPos(e);
     if(currentTool==='lasso'){
       lassoPoints = [[x,y]];
@@ -958,6 +962,7 @@
     return false;
   }
   overlayCanvas.addEventListener('pointerup', e=>{
+    endPeek();
     if(releasePointer(e)){ dragStart=null; return; }
     if(currentTool==='lasso' && lassoPoints.length>2){
       beginEdit();
@@ -981,7 +986,7 @@
     }
     dragStart=null;
   });
-  overlayCanvas.addEventListener('pointercancel', releasePointer);
+  overlayCanvas.addEventListener('pointercancel', e=>{ endPeek(); releasePointer(e); });
 
   // ---------- Resize ----------
   const resizeW = document.getElementById('resizeW'), resizeH = document.getElementById('resizeH');
@@ -1063,6 +1068,27 @@
       out.data[i+3] = base[i+3];
     }
     ctx.putImageData(out,0,0);
+  }
+  // Press-and-hold on the image (효과/선택색상/레벨/곡선 only, once something's
+  // actually changed) shows the image as it was before this menu's edits, so
+  // the user can compare before/after; releasing restores the live preview.
+  const PEEK_MENUS = new Set(['group-effects','group-sc','group-levels','group-curve']);
+  let isPeeking = false;
+  let peekAfterImage = null;
+  function canPeek(){
+    return currentTool==='none' && PEEK_MENUS.has(activeMenuId) && !!editingSnapshot && sessionDirty;
+  }
+  function startPeek(){
+    if(isPeeking || !canPeek()) return;
+    isPeeking = true;
+    peekAfterImage = ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height);
+    ctx.putImageData(editingSnapshot.img,0,0);
+  }
+  function endPeek(){
+    if(!isPeeking) return;
+    isPeeking = false;
+    if(peekAfterImage) ctx.putImageData(peekAfterImage,0,0);
+    peekAfterImage = null;
   }
   function commitEdit(){
     if(!editingSnapshot) return;
@@ -1870,6 +1896,7 @@
   }
   function applyActiveMenu(){
     if(!activeMenuId) return;
+    endPeek(); // never commit/close while the canvas is showing the "before" peek
     const session = MENU_SESSION[activeMenuId];
     if(session) session.commit();
     onMenuClose(activeMenuId);
@@ -1877,6 +1904,7 @@
   }
   function cancelActiveMenu(confirmFirst){
     if(!activeMenuId) return;
+    endPeek();
     // Skip the confirm entirely when nothing was actually changed in this
     // session — there's nothing to lose, so asking would just be noise.
     if(confirmFirst && sessionDirty && !window.confirm('변경 사항을 삭제할까요?')) return;
