@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>포토랩 · 이미지 보정</title>
+<title>포토샷 · 이미지 보정</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15171a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="포토샷">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
   :root{
     --bg:#15171a;
@@ -29,18 +35,17 @@
     overflow:hidden;
   }
   header{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:12px 18px;
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:center;column-gap:8px;
+    padding:10px 14px;
     background:var(--panel);
     border-bottom:1px solid var(--line);
     flex-shrink:0;
   }
-  header h1{
-    font-size:15px;font-weight:600;letter-spacing:.02em;margin:0;
-    display:flex;align-items:center;gap:8px;
-  }
-  header h1 .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;}
-  .header-actions{display:flex;gap:8px;}
+  .header-actions{grid-column:2;display:flex;gap:8px;justify-content:center;}
+  .header-close{grid-column:3;display:flex;justify-content:flex-end;}
+  .iconbtn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+  .iconbtn svg{width:18px;height:18px;}
+  .iconbtn.close-btn:hover:not(:disabled){background:rgba(226,114,91,.15);border-color:var(--danger);color:var(--danger);}
   button{
     font-family:var(--sans);
     cursor:pointer;
@@ -137,10 +142,8 @@
   .mobile-tabbar button.tab-btn.active{color:var(--accent);background:rgba(79,209,197,.14);}
 
   @media (max-width: 860px){
-    header{padding:10px 12px;gap:8px;}
-    header h1{font-size:14px;}
-    .header-actions{gap:6px;}
-    .header-actions button{padding:6px 10px;font-size:12px;}
+    header{padding:8px 10px;column-gap:4px;}
+    .header-actions{gap:4px;}
 
     .layout{flex-direction:column;position:relative;}
     .stage-wrap{padding:10px;}
@@ -181,13 +184,22 @@
 <body>
 
 <header>
-  <h1><span class="dot"></span>포토랩</h1>
+  <input type="file" id="fileInput" accept="image/*">
   <div class="header-actions">
-    <button class="ghost" type="button" id="uploadBtn">이미지 업로드</button>
-    <input type="file" id="fileInput" accept="image/*">
-    <button id="undoBtn" disabled>실행 취소</button>
-    <button id="resetBtn" disabled class="ghost">처음으로</button>
-    <button id="downloadBtn" class="primary" disabled>다운로드</button>
+    <button id="undoBtn" class="iconbtn" disabled type="button" title="실행 취소" aria-label="실행 취소">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+    </button>
+    <button id="resetBtn" class="iconbtn" disabled type="button" title="되돌리기" aria-label="되돌리기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+    </button>
+    <button id="downloadBtn" class="iconbtn primary" disabled type="button" title="다운로드" aria-label="다운로드">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+  </div>
+  <div class="header-close">
+    <button id="closeBtn" class="iconbtn close-btn" disabled type="button" title="닫기" aria-label="닫기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+    </button>
   </div>
 </header>
 
@@ -392,7 +404,6 @@
 <script>
 (function(){
   const fileInput = document.getElementById('fileInput');
-  document.getElementById('uploadBtn').addEventListener('click', ()=> fileInput.click());
   const stageWrap = document.getElementById('stageWrap');
   const emptyState = document.getElementById('emptyState');
   const canvasHolder = document.getElementById('canvasHolder');
@@ -405,7 +416,14 @@
   const downloadBtn = document.getElementById('downloadBtn');
   const undoBtn = document.getElementById('undoBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const closeBtn = document.getElementById('closeBtn');
   const mobileTabBar = document.getElementById('mobileTabBar');
+
+  function updateHistoryButtons(){
+    const hasHistory = undoStack.length>0;
+    undoBtn.disabled = !hasHistory;
+    resetBtn.disabled = !hasHistory;
+  }
 
   function syncTabbarHeight(){
     if(!mobileTabBar) return;
@@ -501,7 +519,8 @@
       sidePanel.style.display='block';
       syncTabbarHeight();
       downloadBtn.disabled=false;
-      resetBtn.disabled=false;
+      closeBtn.disabled=false;
+      updateHistoryButtons();
       document.getElementById('resizeW').value=w;
       document.getElementById('resizeH').value=h;
       updateDims();
@@ -524,7 +543,7 @@
   function pushUndo(preState){
     undoStack.push(preState);
     if(undoStack.length>15) undoStack.shift();
-    undoBtn.disabled = false;
+    updateHistoryButtons();
   }
   function restoreState(s){
     setCanvasSize(s.w,s.h);
@@ -538,12 +557,53 @@
     if(undoStack.length===0) return;
     const s = undoStack.pop();
     restoreState(s);
-    if(undoStack.length===0) undoBtn.disabled=true;
+    updateHistoryButtons();
   });
   resetBtn.addEventListener('click', ()=>{
     if(!initialState) return;
     pushUndo(snapshotState());
     restoreState(initialState);
+  });
+
+  // ---------- Close / discard ----------
+  function resetToEmptyState(){
+    canvasHolder.style.display='none';
+    sidePanel.style.display='none';
+    emptyState.style.display='';
+    setCanvasSize(0,0);
+    mainCanvas.style.width=''; mainCanvas.style.height='';
+    overlayCanvas.style.width=''; overlayCanvas.style.height='';
+    hasSelection=false;
+    undoStack=[];
+    initialState=null;
+    editingSnapshot=null;
+    viewScale=1; userZoomed=false;
+    lassoPoints=[]; cropRect=null; dragStart=null; brushDrawing=false;
+    setTool('none');
+    updateHistoryButtons();
+    downloadBtn.disabled=true;
+    closeBtn.disabled=true;
+    dimsInfo.textContent='이미지 없음';
+    fileInput.value='';
+    blurRange.value=0; noiseRange.value=0;
+    document.getElementById('blurVal').textContent='0';
+    document.getElementById('noiseVal').textContent='0';
+    scRange.value='0'; scCR.value=0; scMG.value=0; scYB.value=0;
+    document.getElementById('scCRVal').textContent='0';
+    document.getElementById('scMGVal').textContent='0';
+    document.getElementById('scYBVal').textContent='0';
+    resetLevelsInputs();
+    curvePoints=[[0,0],[255,255]];
+    drawCurveEditor();
+    if(mobileTabBar){
+      mobileTabBar.querySelectorAll('.tab-btn.active').forEach(b=>b.classList.remove('active'));
+      sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
+    }
+  }
+  closeBtn.addEventListener('click', ()=>{
+    if(window.confirm('진행 상황은 저장되지 않습니다. 새 작업을 시작할까요?')){
+      resetToEmptyState();
+    }
   });
 
   // ---------- Tools ----------

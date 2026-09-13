@@ -1,0 +1,17 @@
+{
+  "name": "포토샷",
+  "short_name": "포토샷",
+  "description": "브라우저에서 바로 쓰는 이미지 보정 앱",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#15171a",
+  "theme_color": "#15171a",
+  "lang": "ko",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
