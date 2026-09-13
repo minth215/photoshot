@@ -91,17 +91,17 @@
     padding:14px;
   }
   .toolrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
-  section.group{
+  .group{
     border:1px solid var(--line);border-radius:8px;margin-bottom:10px;overflow:hidden;background:var(--panel-2);
   }
-  section.group > summary{
+  .group > summary{
     padding:10px 12px;cursor:pointer;font-size:13px;font-weight:600;
     list-style:none;display:flex;align-items:center;justify-content:space-between;
     color:var(--text);
   }
-  section.group > summary::-webkit-details-marker{display:none;}
-  section.group > summary:after{content:'+';color:var(--text-dim);font-weight:400;}
-  section.group[open] > summary:after{content:'−';}
+  .group > summary::-webkit-details-marker{display:none;}
+  .group > summary:after{content:'+';color:var(--text-dim);font-weight:400;}
+  .group[open] > summary:after{content:'−';}
   .group-body{padding:4px 12px 14px 12px;display:flex;flex-direction:column;gap:10px;}
   label.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-dim);}
   label.field .row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--text);}
@@ -125,6 +125,57 @@
     font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;flex-shrink:0;
   }
   input[type=file]{display:none;}
+
+  /* ---------- Mobile bottom menu bar ---------- */
+  .mobile-tabbar{display:none;}
+  .mobile-tabbar button.tab-btn{
+    flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:7px 14px;border:none;border-radius:8px;background:transparent;
+    color:var(--text-dim);font-size:10px;line-height:1;white-space:nowrap;
+  }
+  .mobile-tabbar button.tab-btn svg{width:20px;height:20px;flex-shrink:0;}
+  .mobile-tabbar button.tab-btn.active{color:var(--accent);background:rgba(79,209,197,.14);}
+
+  @media (max-width: 860px){
+    header{padding:10px 12px;gap:8px;}
+    header h1{font-size:14px;}
+    .header-actions{gap:6px;}
+    .header-actions button{padding:6px 10px;font-size:12px;}
+
+    .layout{flex-direction:column;position:relative;}
+    .stage-wrap{padding:10px;}
+
+    aside#sidePanel{
+      width:100%;flex:0 0 auto;
+      border-left:none;border-top:1px solid var(--line);
+      padding:0;overflow:visible;background:var(--panel);
+    }
+    .mobile-tabbar{
+      display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;
+      gap:2px;padding:4px 6px;
+    }
+    .mobile-tabbar::-webkit-scrollbar{height:3px;}
+
+    aside#sidePanel > #toolrowPanel{display:none;}
+    aside#sidePanel > #toolrowPanel.mobile-active{
+      display:flex;flex-wrap:wrap;gap:8px;
+      position:absolute;left:0;right:0;bottom:var(--tabbar-h,56px);
+      background:var(--panel);border-top:1px solid var(--line);
+      padding:12px 14px;margin:0;box-shadow:0 -10px 30px rgba(0,0,0,.45);z-index:15;
+    }
+    aside#sidePanel > .group{display:none;}
+    aside#sidePanel > .group.mobile-active{
+      display:block;
+      position:absolute;left:0;right:0;bottom:var(--tabbar-h,56px);
+      max-height:48vh;overflow-y:auto;
+      background:var(--panel);border-top:1px solid var(--line);
+      margin:0;border-radius:0;border-left:none;border-right:none;border-bottom:none;
+      box-shadow:0 -10px 30px rgba(0,0,0,.45);z-index:15;
+    }
+    aside#sidePanel .group-body{display:flex!important;flex-direction:column;gap:10px;}
+    aside#sidePanel .group > summary{pointer-events:none;}
+    aside#sidePanel .group > summary:after{content:'';}
+  }
 </style>
 </head>
 <body>
@@ -154,7 +205,38 @@
 
   <aside id="sidePanel" style="display:none;">
 
-    <div class="toolrow">
+    <nav class="mobile-tabbar" id="mobileTabBar">
+      <button class="tab-btn" type="button" data-target="toolrowPanel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 8-6 2-2 6-6-16z"/></svg>
+        <span>도구</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-selection">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
+        <span>선택영역</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-canvas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+        <span>캔버스</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-effects">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>
+        <span>효과</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-sc">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20c1.4 0 2-1 2-2s-.5-1.4-.5-1.9.5-1.1 1.5-1.1H17a4 4 0 0 0 4-4c0-5.5-4.5-11-9-11z"/><circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg>
+        <span>선택색상</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-levels">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+        <span>레벨</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-curve">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M4 18c4-1 6-10 16-14"/></svg>
+        <span>곡선</span>
+      </button>
+    </nav>
+
+    <div class="toolrow" id="toolrowPanel">
       <button class="toolbtn" data-tool="none" title="이동/없음">선택 없음</button>
       <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
       <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
@@ -162,7 +244,7 @@
       <button class="toolbtn" data-tool="crop" title="드래그하여 자를 영역을 지정합니다">크롭</button>
     </div>
 
-    <details class="group" open>
+    <details class="group" id="group-selection" open>
       <summary>선택 영역</summary>
       <div class="group-body">
         <p class="hint">올가미·브러쉬로 그린 영역에만 아래 보정이 적용돼요. 아무 선택도 없으면 이미지 전체에 적용됩니다.</p>
@@ -189,7 +271,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="group-canvas">
       <summary>캔버스 (크롭 / 사이즈)</summary>
       <div class="group-body">
         <p class="hint">크롭 도구로 영역을 드래그한 뒤 적용하세요.</p>
@@ -214,7 +296,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="group-effects">
       <summary>효과 (블러 / 노이즈)</summary>
       <div class="group-body">
         <label class="field">
@@ -232,7 +314,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="group-sc">
       <summary>선택색상 (색상 영역별 조정)</summary>
       <div class="group-body">
         <label class="field"><span class="row"><span>색상 범위</span></span>
@@ -264,7 +346,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="group-levels">
       <summary>레벨</summary>
       <div class="group-body">
         <label class="field"><span class="row"><span>입력 최소값</span><span id="lvInBVal">0</span></span>
@@ -284,7 +366,7 @@
       </div>
     </details>
 
-    <details class="group">
+    <details class="group" id="group-curve">
       <summary>곡선</summary>
       <div class="group-body">
         <canvas id="curveCanvas" width="256" height="256"></canvas>
@@ -322,6 +404,12 @@
   const downloadBtn = document.getElementById('downloadBtn');
   const undoBtn = document.getElementById('undoBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const mobileTabBar = document.getElementById('mobileTabBar');
+
+  function syncTabbarHeight(){
+    if(!mobileTabBar) return;
+    sidePanel.style.setProperty('--tabbar-h', mobileTabBar.offsetHeight+'px');
+  }
 
   const MAX_DIM = 1400;
 
@@ -366,6 +454,7 @@
       emptyState.style.display='none';
       canvasHolder.style.display='block';
       sidePanel.style.display='block';
+      syncTabbarHeight();
       downloadBtn.disabled=false;
       resetBtn.disabled=false;
       document.getElementById('resizeW').value=w;
@@ -982,6 +1071,25 @@
     cancelEdit(); curvePoints=[[0,0],[255,255]]; drawCurveEditor();
   });
   drawCurveEditor();
+
+  // ---------- Mobile bottom menu bar ----------
+  if(mobileTabBar){
+    syncTabbarHeight();
+    window.addEventListener('resize', syncTabbarHeight);
+    const tabButtons = mobileTabBar.querySelectorAll('.tab-btn');
+    tabButtons.forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const targetEl = document.getElementById(btn.dataset.target);
+        const wasActive = btn.classList.contains('active');
+        tabButtons.forEach(b=> b.classList.remove('active'));
+        sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=> el.classList.remove('mobile-active'));
+        if(!wasActive && targetEl){
+          btn.classList.add('active');
+          targetEl.classList.add('mobile-active');
+        }
+      });
+    });
+  }
 
   // ---------- Download ----------
   downloadBtn.addEventListener('click', ()=>{
