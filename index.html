@@ -46,6 +46,8 @@
   .header-side-right{grid-column:3;justify-content:flex-end;gap:8px;}
   .header-actions{grid-column:2;display:flex;gap:8px;justify-content:center;}
   .header-crop-size{grid-column:2;display:none;justify-content:center;align-items:center;font-family:var(--mono);font-size:13px;color:var(--accent);white-space:nowrap;}
+  .header-draw-actions{grid-column:2;display:none;gap:8px;justify-content:center;}
+  body.draw-editing .header-draw-actions{display:flex;}
   .header-close{grid-column:3;display:flex;justify-content:flex-end;}
   .iconbtn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
   .iconbtn svg{width:18px;height:18px;}
@@ -82,7 +84,7 @@
   .layout{flex:1;display:flex;min-height:0;}
   .stage-wrap{
     flex:1;display:flex;align-items:center;justify-content:center;
-    padding:24px;overflow:auto;position:relative;
+    padding:24px;overflow:hidden;position:relative;
     background:
       linear-gradient(45deg,#1a1c1f 25%,transparent 25%),
       linear-gradient(-45deg,#1a1c1f 25%,transparent 25%),
@@ -308,6 +310,14 @@
     </button>
   </div>
   <div class="header-crop-size" id="headerCropSize"></div>
+  <div class="header-draw-actions" id="headerDrawActions">
+    <button id="drawUndoBtn" class="iconbtn" disabled type="button" title="획 실행 취소" aria-label="획 실행 취소">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+    </button>
+    <button id="drawRedoBtn" class="iconbtn" disabled type="button" title="획 다시 실행" aria-label="획 다시 실행">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
+    </button>
+  </div>
   <div class="header-close header-side-right">
     <button id="closeBtn" class="iconbtn close-btn" disabled type="button" title="닫기" aria-label="닫기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
@@ -645,6 +655,15 @@
     layer.ctx.putImageData(ls.img, 0, 0);
     return layer;
   }
+  // Restores just the layer stack + active layer from a snapshot (dims, mask
+  // and selection are untouched) — used by the per-stroke undo/redo in the
+  // 그리기 menu, which never changes anything else.
+  function restoreLayersFrom(snap){
+    layers = snap.layers.map(ls => layerFromSnapshot(ls, snap.w, snap.h));
+    activeLayerId = snap.activeLayerId;
+    compositeLayers();
+    renderLayerPanel();
+  }
   function activeLayer(){
     return layers.find(l => l.id===activeLayerId) || layers[layers.length-1] || null;
   }
@@ -833,6 +852,18 @@
     return Math.min(1, availW/mainCanvas.width, availH/mainCanvas.height);
   }
 
+  // Two-finger panning (outside crop mode) offsets the image from center via a
+  // CSS transform — panOffset is in CSS px and clamped so the image can't be
+  // dragged entirely out of view.
+  let panOffsetX = 0, panOffsetY = 0;
+  function clampPanOffset(){
+    const avail = stageAvailSize();
+    const dispW = mainCanvas.width*viewScale, dispH = mainCanvas.height*viewScale;
+    const maxX = Math.max(0, (dispW-avail.w)/2), maxY = Math.max(0, (dispH-avail.h)/2);
+    panOffsetX = Math.max(-maxX, Math.min(maxX, panOffsetX));
+    panOffsetY = Math.max(-maxY, Math.min(maxY, panOffsetY));
+  }
+
   // While the crop menu is active, the canvas's on-screen position/size is driven
   // entirely by the crop pan/zoom state (see renderCropFrame), not by viewScale —
   // otherwise a rotation-triggered dimension change during crop editing would
@@ -845,17 +876,22 @@
     mainCanvas.style.height = h+'px';
     overlayCanvas.style.width = w+'px';
     overlayCanvas.style.height = h+'px';
+    const t = `translate(${panOffsetX}px, ${panOffsetY}px)`;
+    mainCanvas.style.transform = t;
+    overlayCanvas.style.transform = t;
   }
 
   function fitToScreen(){
     viewScale = computeFitScale();
     userZoomed = false;
+    panOffsetX = 0; panOffsetY = 0;
     applyCanvasDisplaySize();
   }
 
   function setViewScale(s){
     viewScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, s));
     userZoomed = true;
+    clampPanOffset();
     applyCanvasDisplaySize();
   }
 
@@ -876,6 +912,9 @@
       renderCropFrame();
     } else if(!userZoomed){
       fitToScreen();
+    } else {
+      clampPanOffset();
+      applyCanvasDisplaySize();
     }
   }).observe(stageWrap);
 
@@ -982,12 +1021,15 @@
     redoStack=[];
     editingSnapshot=null;
     layers=[]; activeLayerId=null; drawLayerForSession=null;
+    strokeUndoStack=[]; strokeRedoStack=[];
+    updateDrawHistoryButtons();
     layerPanel.classList.add('collapsed');
     layerToggleBtn.classList.remove('active');
     layerToggleBtn.style.display='none';
     layerList.innerHTML='';
-    viewScale=1; userZoomed=false;
+    viewScale=1; userZoomed=false; panOffsetX=0; panOffsetY=0;
     lassoPoints=[]; dragStart=null; brushDrawing=false;
+    drawingActive=false; lastDrawPos=null;
     setTool('none');
     cropFrame.hidden=true;
     cropModeActive=false;
@@ -1021,6 +1063,7 @@
     activeMenuId = null;
     document.body.classList.remove('editing-mode');
     document.body.classList.remove('crop-editing');
+    document.body.classList.remove('draw-editing');
     document.querySelectorAll('aside#sidePanel > .group').forEach(g=> g.classList.add('collapsed'));
   }
   closeBtn.addEventListener('click', ()=>{
@@ -1181,6 +1224,32 @@
   let drawingActive = false;
   let lastDrawPos = null;
 
+  // Per-stroke undo/redo, local to the current 그리기 session (separate from
+  // the document-level undo/redo) — lets the header's 획 실행취소/다시실행
+  // step back through individual strokes before committing the whole session.
+  const drawUndoBtn = document.getElementById('drawUndoBtn');
+  const drawRedoBtn = document.getElementById('drawRedoBtn');
+  let strokeUndoStack = [];
+  let strokeRedoStack = [];
+  function updateDrawHistoryButtons(){
+    drawUndoBtn.disabled = strokeUndoStack.length===0;
+    drawRedoBtn.disabled = strokeRedoStack.length===0;
+  }
+  drawUndoBtn.addEventListener('click', ()=>{
+    if(strokeUndoStack.length===0) return;
+    const pre = strokeUndoStack.pop();
+    strokeRedoStack.push(snapshotState());
+    restoreLayersFrom(pre);
+    updateDrawHistoryButtons();
+  });
+  drawRedoBtn.addEventListener('click', ()=>{
+    if(strokeRedoStack.length===0) return;
+    const nxt = strokeRedoStack.pop();
+    strokeUndoStack.push(snapshotState());
+    restoreLayersFrom(nxt);
+    updateDrawHistoryButtons();
+  });
+
   function ensureDrawLayer(){
     if(drawLayerForSession) return drawLayerForSession;
     const layer = createLayer('그리기 레이어', mainCanvas.width, mainCanvas.height);
@@ -1228,19 +1297,25 @@
   function applyDrawAction(){
     commitEdit();
     drawLayerForSession = null;
+    strokeUndoStack = []; strokeRedoStack = [];
+    updateDrawHistoryButtons();
   }
   function cancelDrawAction(){
     cancelEdit();
+    strokeUndoStack = []; strokeRedoStack = [];
+    updateDrawHistoryButtons();
     drawLayerForSession = null;
   }
 
-  // ---------- Pinch to zoom + rotate (two fingers) ----------
+  // ---------- Pinch to zoom + pan + rotate (two fingers) ----------
   const activePointers = new Map(); // pointerId -> {x,y} in client coords
   let pinchActive = false;
   let pinchStartDist = 0;
   let pinchStartScale = 1;
   let pinchStartAngle = 0;
   let pinchStartRotation = 0;
+  let pinchStartMidX = 0, pinchStartMidY = 0;
+  let pinchStartPanX = 0, pinchStartPanY = 0;
   let cropModeActive = false; // true while the 크롭 sub-panel is open
 
   function pointerDistance(){
@@ -1251,13 +1326,27 @@
     const pts = [...activePointers.values()];
     return Math.atan2(pts[1].y-pts[0].y, pts[1].x-pts[0].x) * 180/Math.PI;
   }
+  function pointerMidpoint(){
+    const pts = [...activePointers.values()];
+    return [ (pts[0].x+pts[1].x)/2, (pts[0].y+pts[1].y)/2 ];
+  }
   function startPinch(){
     endPeek(); // a second finger joining a before/after peek should zoom, not stay peeked
+    // A second finger joining mid-stroke means this was a zoom/pan gesture, not
+    // a drawing stroke — roll back whatever this stroke had painted so far.
+    if(drawingActive && currentTool==='draw' && strokeUndoStack.length){
+      restoreLayersFrom(strokeUndoStack.pop());
+      updateDrawHistoryButtons();
+    }
     pinchActive = true;
     pinchStartDist = pointerDistance();
     pinchStartScale = cropModeActive ? imgScale : viewScale;
     pinchStartAngle = pointerAngle();
     pinchStartRotation = cropRotationDeg;
+    const [mx,my] = pointerMidpoint();
+    pinchStartMidX = mx; pinchStartMidY = my;
+    pinchStartPanX = cropModeActive ? imgOffsetX : panOffsetX;
+    pinchStartPanY = cropModeActive ? imgOffsetY : panOffsetY;
     // a second finger cancels any in-progress single-finger tool action
     lassoPoints = [];
     brushDrawing = false;
@@ -1269,15 +1358,24 @@
   function updatePinch(){
     if(!pinchActive || activePointers.size<2 || pinchStartDist<=0) return;
     const scaleFactor = pointerDistance()/pinchStartDist;
-    // In crop mode, pinch-zoom scales the IMAGE behind the fixed frame instead
+    const [mx,my] = pointerMidpoint();
+    const dx = mx-pinchStartMidX, dy = my-pinchStartMidY;
+    // In crop mode, pinch-zoom/pan move the IMAGE behind the fixed frame instead
     // of the general view — the frame itself must never move or resize from this.
     if(cropModeActive){
       imgScale = clampImgScale(pinchStartScale * scaleFactor);
+      imgOffsetX = pinchStartPanX + dx;
+      imgOffsetY = pinchStartPanY + dy;
       clampImgOffset();
       sessionDirty = true;
       renderCropFrame();
     } else {
-      setViewScale(pinchStartScale * scaleFactor);
+      viewScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStartScale * scaleFactor));
+      userZoomed = true;
+      panOffsetX = pinchStartPanX + dx;
+      panOffsetY = pinchStartPanY + dy;
+      clampPanOffset();
+      applyCanvasDisplaySize();
     }
     if(cropModeActive){
       const angleDelta = pointerAngle()-pinchStartAngle;
@@ -1304,9 +1402,13 @@
       renderSelectionOverlay();
     } else if(currentTool==='draw'){
       beginEdit();
+      const preStroke = snapshotState();
       drawingActive = true;
       lastDrawPos = [x,y];
       paintDrawDab(x,y);
+      strokeUndoStack.push(preStroke);
+      strokeRedoStack = [];
+      updateDrawHistoryButtons();
     }
   });
   overlayCanvas.addEventListener('pointermove', e=>{
@@ -1592,6 +1694,10 @@
     canvasHolder.classList.add('crop-mode');
     canvasHolder.style.width = cropViewportW+'px';
     canvasHolder.style.height = cropViewportH+'px';
+    // Crop mode positions mainCanvas via left/top, not the general pan's
+    // transform — clear any leftover transform so the two don't stack.
+    mainCanvas.style.transform = '';
+    overlayCanvas.style.transform = '';
     overlayCanvas.style.display = 'none';
     resetCropView();
     cropFrame.hidden = false;
@@ -2271,7 +2377,11 @@
     } else {
       if(id==='group-resize') syncResizeInputs();
       if(id==='group-sc') syncSCInputs();
-      if(id==='group-draw') drawLayerForSession = null;
+      if(id==='group-draw'){
+        drawLayerForSession = null;
+        strokeUndoStack = []; strokeRedoStack = [];
+        updateDrawHistoryButtons();
+      }
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
     }
@@ -2301,6 +2411,7 @@
     onMenuOpen(id);
     document.body.classList.add('editing-mode');
     document.body.classList.toggle('crop-editing', id==='group-crop');
+    document.body.classList.toggle('draw-editing', id==='group-draw');
   }
   // Visually closes whichever menu is active (deactivates its mobile tab /
   // collapses its desktop section) and returns the header/tab bar to normal.
@@ -2315,6 +2426,7 @@
     }
     document.body.classList.remove('editing-mode');
     document.body.classList.remove('crop-editing');
+    document.body.classList.remove('draw-editing');
     activeMenuId = null;
   }
   function applyActiveMenu(){
