@@ -1258,9 +1258,9 @@
           targetEl.classList.add('mobile-active');
           const tool = MENU_TOOL[btn.dataset.target];
           if(tool) setTool(tool);
-        } else {
-          setTool('none');
         }
+        // Closing the panel intentionally leaves the tool armed — users close it
+        // to see the full image while still drawing/cropping with that tool.
       });
     });
   }
