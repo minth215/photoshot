@@ -519,7 +519,11 @@
     overlayCanvas.width = w; overlayCanvas.height = h;
     maskCanvas.width = w; maskCanvas.height = h;
     mctx.clearRect(0,0,w,h);
-    if(dimsChanged) fitToScreen(); else applyCanvasDisplaySize();
+    // Only auto-fit on a real dimension change (e.g. rotation growing the bounding
+    // box) when the user hasn't manually zoomed — otherwise a pinch-zoom running
+    // together with a pinch-rotate would have its scale stomped back to auto-fit
+    // on every frame the rotation also changes the canvas size.
+    if(dimsChanged && !userZoomed) fitToScreen(); else applyCanvasDisplaySize();
   }
 
   function updateDims(){
@@ -1088,47 +1092,61 @@
     });
   });
 
-  document.querySelectorAll('.crop-handle').forEach(handle=>{
-    handle.addEventListener('pointerdown', e=>{
-      e.preventDefault(); e.stopPropagation();
-      try{ handle.setPointerCapture(e.pointerId); }catch(err){}
-      const startX=e.clientX, startY=e.clientY;
-      const startRect = {x:cropRect.x,y:cropRect.y,w:cropRect.w,h:cropRect.h};
+  // A single-finger drag on the crop rect/handles resizes or moves it, but a
+  // second finger landing anywhere (inside or outside the frame) hands off to the
+  // shared two-finger pinch/rotate gesture instead — sharing the same
+  // activePointers/pinchActive state overlayCanvas uses, so a gesture that starts
+  // with one finger on a handle and the other over the image still works.
+  function attachGestureAwareDrag(el, {start, move}){
+    el.addEventListener('pointerdown', e=>{
+      try{ el.setPointerCapture(e.pointerId); }catch(err){}
+      activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+      if(activePointers.size>=2){ if(!pinchActive) startPinch(); return; }
+      const ctx = start(e);
+      if(ctx===false) return;
       function onMove(e2){
-        const dx=(e2.clientX-startX)/viewScale, dy=(e2.clientY-startY)/viewScale;
-        cropRect = resizeCropRect(handle.dataset.handle, dx, dy, startRect);
+        activePointers.set(e2.pointerId, {x:e2.clientX, y:e2.clientY});
+        if(activePointers.size>=2){ if(!pinchActive) startPinch(); updatePinch(); return; }
+        if(pinchActive) return;
+        move(e2, ctx);
+      }
+      function onUp(e2){
+        releasePointer(e2);
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+        el.removeEventListener('pointercancel', onUp);
+      }
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+      el.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  document.querySelectorAll('.crop-handle').forEach(handle=>{
+    attachGestureAwareDrag(handle, {
+      start(e){
+        e.preventDefault(); e.stopPropagation();
+        return { startX:e.clientX, startY:e.clientY, startRect:{x:cropRect.x,y:cropRect.y,w:cropRect.w,h:cropRect.h} };
+      },
+      move(e2, ctx){
+        const dx=(e2.clientX-ctx.startX)/viewScale, dy=(e2.clientY-ctx.startY)/viewScale;
+        cropRect = resizeCropRect(handle.dataset.handle, dx, dy, ctx.startRect);
         renderCropFrame();
       }
-      function onUp(){
-        handle.removeEventListener('pointermove', onMove);
-        handle.removeEventListener('pointerup', onUp);
-        handle.removeEventListener('pointercancel', onUp);
-      }
-      handle.addEventListener('pointermove', onMove);
-      handle.addEventListener('pointerup', onUp);
-      handle.addEventListener('pointercancel', onUp);
     });
   });
 
-  cropFrameRect.addEventListener('pointerdown', e=>{
-    if(e.target!==cropFrameRect) return;
-    e.preventDefault();
-    try{ cropFrameRect.setPointerCapture(e.pointerId); }catch(err){}
-    const startX=e.clientX, startY=e.clientY;
-    const startRect = {x:cropRect.x,y:cropRect.y,w:cropRect.w,h:cropRect.h};
-    function onMove(e2){
-      const dx=(e2.clientX-startX)/viewScale, dy=(e2.clientY-startY)/viewScale;
-      cropRect = clampRectPosition({x:startRect.x+dx, y:startRect.y+dy, w:startRect.w, h:startRect.h});
+  attachGestureAwareDrag(cropFrameRect, {
+    start(e){
+      if(e.target!==cropFrameRect) return false;
+      e.preventDefault();
+      return { startX:e.clientX, startY:e.clientY, startRect:{x:cropRect.x,y:cropRect.y,w:cropRect.w,h:cropRect.h} };
+    },
+    move(e2, ctx){
+      const dx=(e2.clientX-ctx.startX)/viewScale, dy=(e2.clientY-ctx.startY)/viewScale;
+      cropRect = clampRectPosition({x:ctx.startRect.x+dx, y:ctx.startRect.y+dy, w:ctx.startRect.w, h:ctx.startRect.h});
       renderCropFrame();
     }
-    function onUp(){
-      cropFrameRect.removeEventListener('pointermove', onMove);
-      cropFrameRect.removeEventListener('pointerup', onUp);
-      cropFrameRect.removeEventListener('pointercancel', onUp);
-    }
-    cropFrameRect.addEventListener('pointermove', onMove);
-    cropFrameRect.addEventListener('pointerup', onUp);
-    cropFrameRect.addEventListener('pointercancel', onUp);
   });
 
   // ---------- Rotation (straighten): ruler drag + two-finger gesture ----------
