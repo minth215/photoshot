@@ -1069,7 +1069,8 @@
         commitEdit();
         cropRotationDeg = 0;
         updateRulerUI();
-        cropRect = null; // recompute against the now-baked-in dimensions next time
+        // cropRect already tracks the now-baked-in (rotated) dimensions correctly —
+        // previewRotation kept it in sync on every change, so keep it as-is here.
       } else {
         editingSnapshot = null; // nothing actually changed; discard the baseline quietly
       }
@@ -1143,6 +1144,7 @@
     cropRotationDeg = deg;
     const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
     const {w:newW, h:newH} = rotatedBounds(baseW, baseH, deg);
+    const oldW = mainCanvas.width, oldH = mainCanvas.height;
     setCanvasSize(newW, newH);
     const tmp = document.createElement('canvas');
     tmp.width = baseW; tmp.height = baseH;
@@ -1153,7 +1155,21 @@
     ctx.rotate(deg*Math.PI/180);
     ctx.drawImage(tmp, -baseW/2, -baseH/2);
     ctx.restore();
-    cropRect = rectForRatio(cropRatio);
+    // The image is always drawn centered in the (possibly grown) canvas, so a crop
+    // rect the user already adjusted just needs to shift by the same amount the
+    // center moved — not get thrown away and replaced with a fresh default rect.
+    if(cropRect){
+      const dx = (newW-oldW)/2, dy = (newH-oldH)/2;
+      cropRect = {x:cropRect.x+dx, y:cropRect.y+dy, w:cropRect.w, h:cropRect.h};
+      if(cropRect.w>newW || cropRect.h>newH){
+        const scale = cropRatio!=null ? Math.min(newW/cropRect.w, newH/cropRect.h, 1) : 1;
+        cropRect.w = cropRatio!=null ? cropRect.w*scale : Math.min(cropRect.w, newW);
+        cropRect.h = cropRatio!=null ? cropRect.h*scale : Math.min(cropRect.h, newH);
+      }
+      cropRect = clampRectPosition(cropRect);
+    } else {
+      cropRect = rectForRatio(cropRatio);
+    }
     renderCropFrame();
     updateRulerUI();
   }
