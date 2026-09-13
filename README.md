@@ -19,11 +19,13 @@
 
 ## GitHub Pages 배포
 
-`.github/workflows/deploy-pages.yml` 워크플로가 `main`(및 `claude/photoshop-web-app-qd89t9`) 브랜치에 푸시될 때마다 저장소 루트를 GitHub Pages로 배포합니다.
+`.github/workflows/deploy-pages.yml` 워크플로가 `main` 브랜치에 푸시될 때마다 저장소 루트를 GitHub Pages로 배포합니다.
 
 처음 한 번은 저장소 관리자가 GitHub 저장소 설정에서 Pages를 활성화해야 합니다:
 
 1. 저장소 **Settings → Pages**로 이동
 2. **Build and deployment → Source**를 **GitHub Actions**로 설정
 
-설정 후에는 이 브랜치(또는 `main`)에 푸시할 때마다 자동으로 재배포되며, 배포된 사이트는 `https://<GitHub 사용자명>.github.io/<저장소명>/` 주소에서 접근할 수 있습니다.
+설정 후에는 `main`에 푸시할 때마다 자동으로 재배포되며, 배포된 사이트는 `https://<GitHub 사용자명>.github.io/<저장소명>/` 주소에서 접근할 수 있습니다.
+
+> GitHub Pages용 `github-pages` 배포 환경은 기본적으로 저장소의 기본 브랜치(`main`)에서만 배포를 허용합니다. 다른 브랜치에 푸시해도 사이트에는 영향이 없으며, 기능 브랜치는 `main`으로 병합된 뒤에만 배포됩니다.

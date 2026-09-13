@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - claude/photoshop-web-app-qd89t9
   workflow_dispatch:
 
 permissions:
