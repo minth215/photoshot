@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>포토샷 · 이미지 보정</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15171a">
@@ -165,6 +165,9 @@
   .group > summary::-webkit-details-marker{display:none;}
   .group > summary:after{content:'−';color:var(--text-dim);font-weight:400;}
   .group.collapsed > summary:after{content:'+';}
+  /* Once a menu is open, its own name is redundant (you just picked it from the
+     tab bar / clicked it) — hide the summary entirely and show just the controls. */
+  .group:not(.collapsed) > summary{display:none;}
   .group-body{padding:4px 12px 14px 12px;display:flex;flex-direction:column;gap:10px;}
   .group.collapsed > .group-body{display:none;}
   label.field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-dim);}
@@ -182,6 +185,11 @@
   .btnrow button{flex:1;}
   .hint{font-size:11px;color:var(--text-dim);line-height:1.5;margin:0;}
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .slider-with-input{display:flex;align-items:center;gap:8px;}
+  .slider-with-input input[type=range]{flex:1;}
+  .pct-box{position:relative;flex:0 0 auto;}
+  .pct-box input[type=number]{width:60px;padding-right:16px;text-align:right;}
+  .pct-box::after{content:'%';position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-dim);pointer-events:none;}
   .checkline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);}
   .toggle-btn{width:100%;}
   #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;}
@@ -330,7 +338,6 @@
     <details class="group collapsed" id="group-selection" open>
       <summary>선택 영역</summary>
       <div class="group-body">
-        <p class="hint">올가미·브러쉬로 그린 영역에만 아래 보정이 적용돼요. 아무 선택도 없으면 이미지 전체에 적용됩니다.</p>
         <div class="toolrow">
           <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
           <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
@@ -362,7 +369,6 @@
     <details class="group collapsed" id="group-crop" open>
       <summary>크롭</summary>
       <div class="group-body">
-        <p class="hint">비율을 고르고 모서리·가장자리 바를 끌어 크롭 영역을 조절하세요. 두 손가락으로 이미지를 돌리거나 아래 눈금으로 회전할 수 있어요.</p>
         <div class="ratio-row">
           <button class="ratio-btn active" type="button" data-ratio="free">자유</button>
           <button class="ratio-btn" type="button" data-ratio="1:1">정사각형</button>
@@ -410,29 +416,48 @@
     </details>
 
     <details class="group collapsed" id="group-sc" open>
-      <summary>선택색상 (색상 영역별 조정)</summary>
+      <summary>선택색상</summary>
       <div class="group-body">
-        <label class="field"><span class="row"><span>색상 범위</span></span>
+        <label class="field"><span class="row"><span>색상</span></span>
           <select id="scRange">
-            <option value="0">레드</option>
-            <option value="60">옐로우</option>
-            <option value="120">그린</option>
-            <option value="180">시안</option>
-            <option value="240">블루</option>
-            <option value="300">마젠타</option>
+            <option value="red">빨강 계열</option>
+            <option value="yellow">노랑 계열</option>
+            <option value="green">녹색 계열</option>
+            <option value="cyan">녹청 계열</option>
+            <option value="blue">파랑 계열</option>
+            <option value="magenta">마젠타 계열</option>
+            <option value="white">흰색 계열</option>
+            <option value="neutral">중간 계열</option>
+            <option value="black">검정 계열</option>
           </select>
         </label>
         <label class="field">
-          <span class="row"><span>시안 ↔ 레드</span><span id="scCRVal">0</span></span>
-          <input type="range" id="scCR" min="-100" max="100" value="0">
+          <span class="row"><span>녹청(C)</span></span>
+          <div class="slider-with-input">
+            <input type="range" id="scC" min="-100" max="100" value="0">
+            <div class="pct-box"><input type="number" id="scCNum" min="-100" max="100" value="0"></div>
+          </div>
         </label>
         <label class="field">
-          <span class="row"><span>마젠타 ↔ 그린</span><span id="scMGVal">0</span></span>
-          <input type="range" id="scMG" min="-100" max="100" value="0">
+          <span class="row"><span>마젠타(M)</span></span>
+          <div class="slider-with-input">
+            <input type="range" id="scM" min="-100" max="100" value="0">
+            <div class="pct-box"><input type="number" id="scMNum" min="-100" max="100" value="0"></div>
+          </div>
         </label>
         <label class="field">
-          <span class="row"><span>옐로우 ↔ 블루</span><span id="scYBVal">0</span></span>
-          <input type="range" id="scYB" min="-100" max="100" value="0">
+          <span class="row"><span>노랑(Y)</span></span>
+          <div class="slider-with-input">
+            <input type="range" id="scY" min="-100" max="100" value="0">
+            <div class="pct-box"><input type="number" id="scYNum" min="-100" max="100" value="0"></div>
+          </div>
+        </label>
+        <label class="field">
+          <span class="row"><span>검정(B)</span></span>
+          <div class="slider-with-input">
+            <input type="range" id="scK" min="-100" max="100" value="0">
+            <div class="pct-box"><input type="number" id="scKNum" min="-100" max="100" value="0"></div>
+          </div>
         </label>
       </div>
     </details>
@@ -457,7 +482,6 @@
       <summary>곡선</summary>
       <div class="group-body">
         <canvas id="curveCanvas" width="256" height="256"></canvas>
-        <p class="hint">그래프를 클릭해 포인트를 추가하고 드래그하세요. 포인트를 더블클릭하면 삭제됩니다.</p>
         <div class="btnrow">
           <button id="resetCurveBtn" class="ghost">곡선 초기화</button>
         </div>
@@ -699,10 +723,7 @@
     blurRange.value=0; noiseRange.value=0;
     document.getElementById('blurVal').textContent='0';
     document.getElementById('noiseVal').textContent='0';
-    scRange.value='0'; scCR.value=0; scMG.value=0; scYB.value=0;
-    document.getElementById('scCRVal').textContent='0';
-    document.getElementById('scMGVal').textContent='0';
-    document.getElementById('scYBVal').textContent='0';
+    resetSCInputs();
     resetLevelsInputs();
     curvePoints=[[0,0],[255,255]];
     drawCurveEditor();
@@ -776,6 +797,7 @@
   // into one undo checkpoint when the header's 적용 is pressed.
   document.getElementById('invertSelBtn').addEventListener('click', ()=>{
     beginEdit();
+    sessionDirty = true;
     ensureMaskInitialized();
     const w=maskCanvas.width,h=maskCanvas.height;
     const id = mctx.getImageData(0,0,w,h);
@@ -785,6 +807,7 @@
   });
   document.getElementById('clearSelBtn').addEventListener('click', ()=>{
     beginEdit();
+    sessionDirty = true;
     mctx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
     hasSelection=false;
     renderSelectionOverlay();
@@ -801,6 +824,7 @@
   featherRange.addEventListener('input', ()=>{
     document.getElementById('featherVal').textContent = featherRange.value;
     if(!featherBaseMask) return;
+    sessionDirty = true;
     const r = parseInt(featherRange.value,10);
     const blurred = boxBlurAlpha(featherBaseMask, maskCanvas.width, maskCanvas.height, r);
     mctx.putImageData(blurred,0,0);
@@ -823,6 +847,7 @@
   }
 
   function paintBrush(x,y,subtract){
+    sessionDirty = true;
     const size = parseInt(document.getElementById('brushSize').value,10);
     const hardness = parseInt(document.getElementById('brushHardness').value,10)/100;
     const r = size/2;
@@ -875,6 +900,7 @@
     if(cropModeActive){
       imgScale = clampImgScale(pinchStartScale * scaleFactor);
       clampImgOffset();
+      sessionDirty = true;
       renderCropFrame();
     } else {
       setViewScale(pinchStartScale * scaleFactor);
@@ -927,6 +953,7 @@
     if(releasePointer(e)){ dragStart=null; return; }
     if(currentTool==='lasso' && lassoPoints.length>2){
       beginEdit();
+      sessionDirty = true;
       mctx.save();
       mctx.globalCompositeOperation='source-over';
       mctx.fillStyle='white';
@@ -968,6 +995,7 @@
   function previewResize(w,h){
     beginEdit();
     if(!editingSnapshot) return;
+    sessionDirty = true;
     const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
     const tmp = document.createElement('canvas');
     tmp.width = baseW; tmp.height = baseH;
@@ -1002,12 +1030,18 @@
   }
 
   // ---------- Generic live-preview edit machinery ----------
+  // sessionDirty tracks whether the CURRENT menu session actually changed
+  // anything, so the header's 취소 can skip its confirm prompt when there's
+  // nothing to lose (see cancelActiveMenu).
+  let sessionDirty = false;
   function beginEdit(){
     if(editingSnapshot) return;
     editingSnapshot = snapshotState();
+    sessionDirty = false;
   }
   function previewEffect(effectFn){
     if(!editingSnapshot) return;
+    sessionDirty = true;
     const w=editingSnapshot.w, h=editingSnapshot.h;
     const base = new Uint8ClampedArray(editingSnapshot.img.data);
     const effect = effectFn(new Uint8ClampedArray(base), w, h);
@@ -1026,11 +1060,13 @@
     if(!editingSnapshot) return;
     pushUndo(editingSnapshot);
     editingSnapshot = null;
+    sessionDirty = false;
   }
   function cancelEdit(){
     if(!editingSnapshot) return;
     restoreState(editingSnapshot);
     editingSnapshot = null;
+    sessionDirty = false;
   }
 
   // ---------- Crop frame (fixed & centered; image pans/zooms behind it) ----------
@@ -1143,6 +1179,7 @@
       const rv = btn.dataset.ratio;
       cropRatio = rv==='free' ? null : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
       resetCropView();
+      sessionDirty = true;
       renderCropFrame();
     });
   });
@@ -1235,6 +1272,7 @@
         frameW = sz.w; frameH = sz.h;
         imgScale = clampImgScale(imgScale);
         clampImgOffset();
+        sessionDirty = true;
         renderCropFrame();
       }
     });
@@ -1251,6 +1289,7 @@
       imgOffsetX = pctx.startOffX + (e2.clientX-pctx.startX);
       imgOffsetY = pctx.startOffY + (e2.clientY-pctx.startY);
       clampImgOffset();
+      sessionDirty = true;
       renderCropFrame();
     }
   });
@@ -1265,6 +1304,7 @@
   }
   function previewRotation(deg){
     if(!editingSnapshot) return;
+    sessionDirty = true;
     cropRotationDeg = deg;
     const baseW = editingSnapshot.w, baseH = editingSnapshot.h;
     const {w:newW, h:newH} = rotatedBounds(baseW, baseH, deg);
@@ -1434,9 +1474,7 @@
   function applyEffectsAction(){ commitEdit(); resetEffectsInputs(); }
   function cancelEffectsAction(){ cancelEdit(); resetEffectsInputs(); }
 
-  // ---------- Selective color ----------
-  const scRange = document.getElementById('scRange');
-  const scCR = document.getElementById('scCR'), scMG = document.getElementById('scMG'), scYB = document.getElementById('scYB');
+  // ---------- Selective color (Photoshop-style: 9 color ranges × C/M/Y/K) ----------
   function rgbToHue(r,g,b){
     r/=255;g/=255;b/=255;
     const max=Math.max(r,g,b), min=Math.min(r,g,b);
@@ -1454,35 +1492,113 @@
     let d = Math.abs(a-b)%360;
     return d>180 ? 360-d : d;
   }
+  const scRangeSelect = document.getElementById('scRange');
+  const scC = document.getElementById('scC'), scCNum = document.getElementById('scCNum');
+  const scM = document.getElementById('scM'), scMNum = document.getElementById('scMNum');
+  const scY = document.getElementById('scY'), scYNum = document.getElementById('scYNum');
+  const scK = document.getElementById('scK'), scKNum = document.getElementById('scKNum');
+  const SC_RANGES = ['red','yellow','green','cyan','blue','magenta','white','neutral','black'];
+  const SC_HUE_CENTER = {red:0,yellow:60,green:120,cyan:180,blue:240,magenta:300};
+  let scValues = {};
+  let scCurrentRange = 'red';
+  function resetSCValues(){
+    SC_RANGES.forEach(r=> scValues[r] = {c:0,m:0,y:0,k:0});
+  }
+  resetSCValues();
+
+  // Each pixel gets a 0..1 membership weight per color range: the six hue-based
+  // ranges are weighted by both hue proximity and saturation (so a nearly-gray
+  // pixel doesn't get pulled by a chromatic range), and the three tonal ranges
+  // (whites/neutrals/blacks) are weighted purely by lightness.
+  function scWeights(r,g,b){
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    const L = (max+min)/2/255;
+    const sat = max===0 ? 0 : (max-min)/max;
+    const hue = rgbToHue(r,g,b);
+    const w = {};
+    for(const k in SC_HUE_CENTER){
+      const hueW = Math.max(0, 1 - hueDist(hue, SC_HUE_CENTER[k])/60);
+      w[k] = hueW * sat;
+    }
+    w.white = Math.max(0, Math.min(1, (L-0.5)/0.5));
+    w.black = Math.max(0, Math.min(1, (0.5-L)/0.5));
+    w.neutral = Math.max(0, 1 - Math.abs(L-0.5)*2);
+    return w;
+  }
+  function scAggregate(r,g,b){
+    const w = scWeights(r,g,b);
+    let c=0,m=0,y=0,k=0;
+    for(const range of SC_RANGES){
+      const wt = w[range];
+      if(!wt) continue;
+      const v = scValues[range];
+      c += wt*v.c; m += wt*v.m; y += wt*v.y; k += wt*v.k;
+    }
+    return [
+      Math.max(-100,Math.min(100,c)),
+      Math.max(-100,Math.min(100,m)),
+      Math.max(-100,Math.min(100,y)),
+      Math.max(-100,Math.min(100,k))
+    ];
+  }
+  // "Relative" method (matches Photoshop's default): a positive adjustment pulls
+  // the channel down proportional to its current value; a negative one pulls it
+  // up proportional to its remaining headroom.
+  function scAdjustChannel(val, delta){
+    return delta>=0 ? (val - val*delta) : (val - (255-val)*delta);
+  }
   function runSCPreview(){
     beginEdit();
-    const center = parseFloat(scRange.value);
-    const cr = parseInt(scCR.value,10), mg = parseInt(scMG.value,10), yb = parseInt(scYB.value,10);
-    previewEffect((data,w,h)=>{
+    previewEffect((data)=>{
       for(let i=0;i<data.length;i+=4){
-        const r=data[i],g=data[i+1],b=data[i+2];
-        const hue = rgbToHue(r,g,b);
-        const dist = hueDist(hue,center);
-        const weight = Math.max(0, 1 - dist/50);
-        if(weight<=0) continue;
-        data[i]   = data[i]   + (cr/100)*40*weight;
-        data[i+1] = data[i+1] + (mg/100)*40*weight;
-        data[i+2] = data[i+2] + (yb/100)*40*weight;
+        const r=data[i], g=data[i+1], b=data[i+2];
+        const [c,m,y,k] = scAggregate(r,g,b);
+        let R = scAdjustChannel(r, c/100);
+        let G = scAdjustChannel(g, m/100);
+        let B = scAdjustChannel(b, y/100);
+        const dk = k/100;
+        if(dk>=0){ R*=(1-dk); G*=(1-dk); B*=(1-dk); }
+        else { R += (255-R)*(-dk); G += (255-G)*(-dk); B += (255-B)*(-dk); }
+        data[i]=R; data[i+1]=G; data[i+2]=B;
       }
       return data;
     });
   }
-  [scRange,scCR,scMG,scYB].forEach(el=>{
-    el.addEventListener('input', ()=>{
-      document.getElementById('scCRVal').textContent=scCR.value;
-      document.getElementById('scMGVal').textContent=scMG.value;
-      document.getElementById('scYBVal').textContent=scYB.value;
+  function syncSCInputs(){
+    const v = scValues[scCurrentRange];
+    scC.value=v.c; scCNum.value=v.c;
+    scM.value=v.m; scMNum.value=v.m;
+    scY.value=v.y; scYNum.value=v.y;
+    scK.value=v.k; scKNum.value=v.k;
+  }
+  function bindSCChannel(rangeInput, numInput, channel){
+    function apply(v){
+      v = Math.max(-100, Math.min(100, Math.round(v)));
+      scValues[scCurrentRange][channel] = v;
+      rangeInput.value = v;
+      numInput.value = v;
+      sessionDirty = true;
       runSCPreview();
+    }
+    rangeInput.addEventListener('input', ()=> apply(parseInt(rangeInput.value,10)));
+    numInput.addEventListener('input', ()=>{
+      const n = parseInt(numInput.value,10);
+      if(!isNaN(n)) apply(n);
     });
+  }
+  bindSCChannel(scC, scCNum, 'c');
+  bindSCChannel(scM, scMNum, 'm');
+  bindSCChannel(scY, scYNum, 'y');
+  bindSCChannel(scK, scKNum, 'k');
+  scRangeSelect.addEventListener('change', ()=>{
+    scCurrentRange = scRangeSelect.value;
+    syncSCInputs();
   });
   function resetSCInputs(){
-    scCR.value=0;scMG.value=0;scYB.value=0;
-    document.getElementById('scCRVal').textContent='0';document.getElementById('scMGVal').textContent='0';document.getElementById('scYBVal').textContent='0';
+    resetSCValues();
+    scCurrentRange = 'red';
+    scRangeSelect.value = 'red';
+    syncSCInputs();
   }
   function applySCAction(){ commitEdit(); resetSCInputs(); }
   function cancelSCAction(){ cancelEdit(); resetSCInputs(); }
@@ -1657,6 +1773,7 @@
       showCropFrame();
     } else {
       if(id==='group-resize') syncResizeInputs();
+      if(id==='group-sc') syncSCInputs();
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
     }
@@ -1710,7 +1827,9 @@
   }
   function cancelActiveMenu(confirmFirst){
     if(!activeMenuId) return;
-    if(confirmFirst && !window.confirm('변경 사항을 삭제할까요?')) return;
+    // Skip the confirm entirely when nothing was actually changed in this
+    // session — there's nothing to lose, so asking would just be noise.
+    if(confirmFirst && sessionDirty && !window.confirm('변경 사항을 삭제할까요?')) return;
     const session = MENU_SESSION[activeMenuId];
     if(session) session.cancel();
     onMenuClose(activeMenuId);
