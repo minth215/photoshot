@@ -518,9 +518,8 @@
   const headerCropSize = document.getElementById('headerCropSize');
 
   function updateHistoryButtons(){
-    const hasHistory = undoStack.length>0;
-    undoBtn.disabled = !hasHistory;
-    resetBtn.disabled = !hasHistory;
+    undoBtn.disabled = undoStack.length===0;
+    resetBtn.disabled = redoStack.length===0;
   }
 
   const MAX_DIM = 1400;
@@ -532,7 +531,7 @@
 
   let currentTool = 'none';
   let undoStack = [];
-  let initialState = null;
+  let redoStack = [];
 
   let editingSnapshot = null; // ImageData taken before a live-preview edit begins
 
@@ -637,7 +636,7 @@
       ctx.drawImage(img,0,0,w,h);
       hasSelection = false;
       undoStack = [];
-      initialState = snapshotState();
+      redoStack = [];
       emptyState.style.display='none';
       canvasHolder.style.display='block';
       sidePanel.style.display='block';
@@ -665,6 +664,9 @@
   function pushUndo(preState){
     undoStack.push(preState);
     if(undoStack.length>15) undoStack.shift();
+    // A fresh edit branches off from wherever we are — whatever was in the
+    // redo stack no longer leads anywhere, so it can't be replayed.
+    redoStack = [];
     updateHistoryButtons();
   }
   function restoreState(s){
@@ -675,16 +677,22 @@
     updateDims();
     renderSelectionOverlay();
   }
+  // 실행 취소 (undo) and 되돌리기 (redo) walk the same history in opposite
+  // directions: undo pops the last state off undoStack and parks the current
+  // state on redoStack so 되돌리기 can bring it back; redo does the reverse.
   undoBtn.addEventListener('click', ()=>{
     if(undoStack.length===0) return;
     const s = undoStack.pop();
+    redoStack.push(snapshotState());
     restoreState(s);
     updateHistoryButtons();
   });
   resetBtn.addEventListener('click', ()=>{
-    if(!initialState) return;
-    pushUndo(snapshotState());
-    restoreState(initialState);
+    if(redoStack.length===0) return;
+    const s = redoStack.pop();
+    undoStack.push(snapshotState());
+    restoreState(s);
+    updateHistoryButtons();
   });
 
   // ---------- Close / discard ----------
@@ -697,7 +705,7 @@
     overlayCanvas.style.width=''; overlayCanvas.style.height='';
     hasSelection=false;
     undoStack=[];
-    initialState=null;
+    redoStack=[];
     editingSnapshot=null;
     viewScale=1; userZoomed=false;
     lassoPoints=[]; dragStart=null; brushDrawing=false;
