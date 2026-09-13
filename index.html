@@ -393,6 +393,7 @@
 (function(){
   const fileInput = document.getElementById('fileInput');
   document.getElementById('uploadBtn').addEventListener('click', ()=> fileInput.click());
+  const stageWrap = document.getElementById('stageWrap');
   const emptyState = document.getElementById('emptyState');
   const canvasHolder = document.getElementById('canvasHolder');
   const sidePanel = document.getElementById('sidePanel');
@@ -425,15 +426,59 @@
   let editingSnapshot = null; // ImageData taken before a live-preview edit begins
 
   function setCanvasSize(w,h){
+    const dimsChanged = (mainCanvas.width!==w || mainCanvas.height!==h);
     mainCanvas.width = w; mainCanvas.height = h;
     overlayCanvas.width = w; overlayCanvas.height = h;
     maskCanvas.width = w; maskCanvas.height = h;
     mctx.clearRect(0,0,w,h);
+    if(dimsChanged) fitToScreen(); else applyCanvasDisplaySize();
   }
 
   function updateDims(){
     dimsInfo.textContent = mainCanvas.width + ' × ' + mainCanvas.height + ' px';
   }
+
+  // ---------- Zoom (fit-to-screen + pinch) ----------
+  // The canvas's own width/height attributes (the pixel buffer) never change here,
+  // only their CSS display size — so the underlying image data stays full quality.
+  let viewScale = 1;
+  let userZoomed = false;
+  const MIN_ZOOM = 0.15, MAX_ZOOM = 8;
+
+  function computeFitScale(){
+    if(!mainCanvas.width || !mainCanvas.height) return 1;
+    const cs = getComputedStyle(stageWrap);
+    const padX = parseFloat(cs.paddingLeft)+parseFloat(cs.paddingRight);
+    const padY = parseFloat(cs.paddingTop)+parseFloat(cs.paddingBottom);
+    const availW = Math.max(50, stageWrap.clientWidth-padX);
+    const availH = Math.max(50, stageWrap.clientHeight-padY);
+    return Math.min(1, availW/mainCanvas.width, availH/mainCanvas.height);
+  }
+
+  function applyCanvasDisplaySize(){
+    const w = Math.round(mainCanvas.width*viewScale);
+    const h = Math.round(mainCanvas.height*viewScale);
+    mainCanvas.style.width = w+'px';
+    mainCanvas.style.height = h+'px';
+    overlayCanvas.style.width = w+'px';
+    overlayCanvas.style.height = h+'px';
+  }
+
+  function fitToScreen(){
+    viewScale = computeFitScale();
+    userZoomed = false;
+    applyCanvasDisplaySize();
+  }
+
+  function setViewScale(s){
+    viewScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, s));
+    userZoomed = true;
+    applyCanvasDisplaySize();
+  }
+
+  window.addEventListener('resize', ()=>{
+    if(!userZoomed) fitToScreen();
+  });
 
   // ---------- File loading ----------
   fileInput.addEventListener('change', e=>{
@@ -627,9 +672,37 @@
     if(!subtract) hasSelection = true;
   }
 
+  // ---------- Pinch to zoom (two fingers) ----------
+  const activePointers = new Map(); // pointerId -> {x,y} in client coords
+  let pinchActive = false;
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+
+  function pointerDistance(){
+    const pts = [...activePointers.values()];
+    return Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+  }
+  function startPinch(){
+    pinchActive = true;
+    pinchStartDist = pointerDistance();
+    pinchStartScale = viewScale;
+    // a second finger cancels any in-progress single-finger tool action
+    lassoPoints = [];
+    brushDrawing = false;
+    dragStart = null;
+    if(cropRect && (cropRect.w<=2 || cropRect.h<=2)) cropRect = null;
+    renderSelectionOverlay();
+  }
+  function updatePinch(){
+    if(!pinchActive || activePointers.size<2 || pinchStartDist<=0) return;
+    setViewScale(pinchStartScale * (pointerDistance()/pinchStartDist));
+  }
+
   overlayCanvas.addEventListener('pointerdown', e=>{
+    try{ overlayCanvas.setPointerCapture(e.pointerId); }catch(err){}
+    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(activePointers.size>=2){ startPinch(); return; }
     if(currentTool==='none') return;
-    overlayCanvas.setPointerCapture(e.pointerId);
     const [x,y] = canvasPos(e);
     if(currentTool==='lasso'){
       lassoPoints = [[x,y]];
@@ -644,6 +717,9 @@
     }
   });
   overlayCanvas.addEventListener('pointermove', e=>{
+    if(activePointers.has(e.pointerId)) activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pinchActive){ updatePinch(); return; }
+    if(activePointers.size>=2) return;
     if(currentTool==='none') return;
     const [x,y] = canvasPos(e);
     if(currentTool==='lasso' && lassoPoints.length){
@@ -660,7 +736,16 @@
       renderSelectionOverlay();
     }
   });
+  function releasePointer(e){
+    activePointers.delete(e.pointerId);
+    if(activePointers.size<2 && pinchActive){
+      pinchActive = false;
+      return true; // this up-event ended a pinch gesture, not a tool action
+    }
+    return false;
+  }
   overlayCanvas.addEventListener('pointerup', e=>{
+    if(releasePointer(e)){ dragStart=null; return; }
     if(currentTool==='lasso' && lassoPoints.length>2){
       pushUndo(snapshotState());
       mctx.save();
@@ -686,6 +771,7 @@
     }
     dragStart=null;
   });
+  overlayCanvas.addEventListener('pointercancel', releasePointer);
 
   document.getElementById('applyCropBtn').addEventListener('click', ()=>{
     if(!cropRect) return;
