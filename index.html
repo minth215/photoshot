@@ -2500,13 +2500,28 @@
     overlayCanvas.style.display = '';
     fitToScreen();
   }
+  // Adapts the CURRENT crop rectangle to a newly-picked ratio instead of
+  // discarding it — trims whichever dimension is now too big for the new
+  // ratio evenly off both sides (e.g. a free-form 10x20 selection becomes
+  // 10x10 for a 1:1 ratio, 5px off the top and 5px off the bottom), so
+  // switching ratios keeps as much of what the user already framed as
+  // possible instead of resetting to a brand new default region.
+  function adaptFrameToRatio(R){
+    if(R==null || !frameW || !frameH) return; // free ratio: no forced shape to adapt to
+    const curR = frameW/frameH;
+    let w = frameW, h = frameH;
+    if(curR > R) w = h*R; else if(curR < R) h = w/R;
+    frameW = Math.max(MIN_CROP, w); frameH = Math.max(MIN_CROP, h);
+    clampImgOffset();
+  }
   document.querySelectorAll('#group-crop .ratio-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('#group-crop .ratio-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       const rv = btn.dataset.ratio;
       cropRatio = rv==='free' ? null : rv==='original' ? (mainCanvas.width/mainCanvas.height) : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
-      resetCropView();
+      adaptFrameToRatio(cropRatio);
+      if(cropAutoZoom) zoomToFitFrame();
       updateCircleCropRowVisibility();
       sessionDirty = true;
       renderCropFrame();
@@ -2622,23 +2637,49 @@
     attachGestureAwareDrag(handle, {
       start(e){
         e.preventDefault(); e.stopPropagation();
-        return { startX:e.clientX, startY:e.clientY, startFrame:{w:frameW,h:frameH}, startOffX:imgOffsetX, startOffY:imgOffsetY };
+        return { startX:e.clientX, startY:e.clientY, startFrame:{w:frameW,h:frameH}, startOffX:imgOffsetX, startOffY:imgOffsetY, scale:imgScale };
       },
       move(e2, hctx){
-        const dx = e2.clientX-hctx.startX, dy = e2.clientY-hctx.startY;
-        const sz = resizeFrame(h, dx, dy, hctx.startFrame);
-        const deltaW = sz.w - hctx.startFrame.w, deltaH = sz.h - hctx.startFrame.h;
+        // The frame is always re-centered in the viewport by CSS, so a width/
+        // height change is split evenly across both edges on screen — growing
+        // by d only moves either edge by d/2. Doubling the raw pointer delta
+        // here makes the edge under the user's finger track it 1:1; the pan
+        // compensation below (using that same halved delta) is what then
+        // keeps the *opposite* edge looking anchored to the image.
+        const dx = (e2.clientX-hctx.startX)*2, dy = (e2.clientY-hctx.startY)*2;
+        const dispW = mainCanvas.width*hctx.scale, dispH = mainCanvas.height*hctx.scale;
+        function tentative(k){
+          const sz = resizeFrame(h, dx*k, dy*k, hctx.startFrame);
+          const deltaW = sz.w-hctx.startFrame.w, deltaH = sz.h-hctx.startFrame.h;
+          let offX = hctx.startOffX, offY = hctx.startOffY;
+          if(moveR) offX = hctx.startOffX - deltaW/2;
+          else if(moveL) offX = hctx.startOffX + deltaW/2;
+          if(moveB) offY = hctx.startOffY - deltaH/2;
+          else if(moveT) offY = hctx.startOffY + deltaH/2;
+          return {sz, offX, offY};
+        }
+        // The image is never re-zoomed mid-drag (that would yank the picture
+        // around under the user's hand), so growth is capped at whatever the
+        // image's current size/pan can actually still cover — found by
+        // bisecting how much of the raw drag to honor — instead of growing
+        // past the edge and having to snap back the other way afterward.
+        function fits(t){
+          if(Math.max(t.sz.w/mainCanvas.width, t.sz.h/mainCanvas.height) > hctx.scale+1e-6) return false;
+          const maxX = Math.max(0,(dispW-t.sz.w)/2), maxY = Math.max(0,(dispH-t.sz.h)/2);
+          return Math.abs(t.offX) <= maxX+0.5 && Math.abs(t.offY) <= maxY+0.5;
+        }
+        let k = 1;
+        if(!fits(tentative(1))){
+          let lo=0, hi=1;
+          for(let i=0;i<24;i++){
+            const mid=(lo+hi)/2;
+            if(fits(tentative(mid))) lo=mid; else hi=mid;
+          }
+          k = lo;
+        }
+        const {sz, offX, offY} = tentative(k);
         frameW = sz.w; frameH = sz.h;
-        // The frame is always re-centered in the viewport by CSS, so growing/
-        // shrinking it would otherwise move BOTH edges symmetrically. Shifting
-        // the image by half the size delta (in the direction opposite the
-        // dragged edge) cancels that for the edge that should stay anchored —
-        // only the edge under the user's hand actually moves against the image.
-        if(moveR) imgOffsetX = hctx.startOffX - deltaW/2;
-        else if(moveL) imgOffsetX = hctx.startOffX + deltaW/2;
-        if(moveB) imgOffsetY = hctx.startOffY - deltaH/2;
-        else if(moveT) imgOffsetY = hctx.startOffY + deltaH/2;
-        imgScale = clampImgScale(imgScale);
+        imgOffsetX = offX; imgOffsetY = offY;
         clampImgOffset();
         sessionDirty = true;
         renderCropFrame();
