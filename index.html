@@ -115,6 +115,13 @@
      crop viewport. Dragging the backdrop (crop-frame) pans the image behind it;
      only the handles (children, pointer-events re-enabled) resize the frame. */
   .crop-frame{position:absolute;inset:0;overflow:hidden;pointer-events:auto;touch-action:none;z-index:20;cursor:move;}
+  .crop-autozoom-toggle{
+    display:none;position:absolute;top:10px;left:10px;z-index:25;
+    align-items:center;gap:8px;padding:6px 10px;border-radius:8px;
+    background:rgba(21,23,26,.75);border:1px solid var(--line);
+    font-size:12px;color:var(--text);white-space:nowrap;
+  }
+  body.crop-editing .crop-autozoom-toggle{display:flex;}
   .crop-rect{
     position:absolute;pointer-events:none;
     box-shadow:0 0 0 9999px rgba(0,0,0,.55);
@@ -377,6 +384,13 @@
           <div class="crop-handle corner sw" data-handle="sw"></div>
           <div class="crop-handle corner se" data-handle="se"></div>
         </div>
+      </div>
+      <div class="crop-autozoom-toggle" id="cropAutoZoomWrap">
+        <span>자동 확대</span>
+        <label class="switch">
+          <input type="checkbox" id="cropAutoZoomToggle" checked>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
       </div>
     </div>
     <button id="layerToggleBtn" class="layer-tab-btn" type="button" title="레이어" aria-label="레이어" style="display:none;">
@@ -1209,6 +1223,8 @@
     updateRulerUI();
     lockAspectOn = true;
     lockAspectToggle.checked = true;
+    cropAutoZoom = true;
+    cropAutoZoomToggle.checked = true;
     featherToggle.checked = false;
     featherWrap.style.display = 'none';
     featherOnMask = null;
@@ -1941,9 +1957,11 @@
   const rotateRuler = document.getElementById('rotateRuler');
   const rotateRulerTrack = document.getElementById('rotateRulerTrack');
   const rotateValueEl = document.getElementById('rotateValue');
+  const cropAutoZoomToggle = document.getElementById('cropAutoZoomToggle');
   const MIN_CROP = 20;
   const PX_PER_DEG = 6;
   let cropRatio = null;      // null = free, else numeric width/height
+  let cropAutoZoom = true;  // when on, every handle-resize re-fits the selection to fill the viewport
   let cropRotationDeg = 0;
   let cropViewportW = 0, cropViewportH = 0; // fixed crop-mode viewport size, CSS px
   let frameW = 0, frameH = 0;               // crop frame size, CSS px (always centered)
@@ -2022,6 +2040,8 @@
     overlayCanvas.style.transform = '';
     overlayCanvas.style.display = 'none';
     resetCropView();
+    cropAutoZoom = true;
+    cropAutoZoomToggle.checked = true;
     cropFrame.hidden = false;
     renderCropFrame();
   }
@@ -2050,6 +2070,9 @@
       renderCropFrame();
     });
   });
+  cropAutoZoomToggle.addEventListener('change', ()=>{
+    cropAutoZoom = cropAutoZoomToggle.checked;
+  });
 
   // A single-finger drag resizes a handle (frame stays centered, growing/shrinking
   // symmetrically about its own center) or, anywhere else on the crop-frame
@@ -2065,7 +2088,7 @@
   // if that isn't the finger that started the single-pointer drag. A `primaryId`
   // closure variable instead tracks which pointer (if any) owns the current
   // single-pointer action, mirroring how overlayCanvas's own tool handlers work.
-  function attachGestureAwareDrag(el, {start, move}){
+  function attachGestureAwareDrag(el, {start, move, end}){
     let primaryId = null;
     let ctx = null;
     el.addEventListener('pointerdown', e=>{
@@ -2086,15 +2109,20 @@
       move(e, ctx);
     });
     function endPrimary(e){
-      if(e.pointerId===primaryId){ primaryId=null; ctx=null; }
+      if(e.pointerId===primaryId){
+        const wasCtx = ctx;
+        primaryId=null; ctx=null;
+        if(end) end(e, wasCtx);
+      }
       releasePointer(e);
     }
     el.addEventListener('pointerup', endPrimary);
     el.addEventListener('pointercancel', endPrimary);
   }
 
-  // Center-anchored resize: dragging one edge/corner grows or shrinks the frame
-  // symmetrically about its own center, so it never has to move to stay centered.
+  // Anchor-based resize: dragging one edge/corner only moves that edge — the
+  // opposite edge/corner stays visually fixed against the image (handled by
+  // the caller compensating imgOffsetX/Y using the w/h delta returned here).
   function resizeFrame(handle, dx, dy, startFrame){
     const moveT = handle.includes('n'), moveB = handle.includes('s');
     const moveL = handle.includes('w'), moveR = handle.includes('e');
@@ -2102,8 +2130,8 @@
     const maxW = cropViewportW, maxH = cropViewportH;
     let w = startFrame.w, h = startFrame.h;
     if(cropRatio==null){
-      if(moveL||moveR) w = startFrame.w + (moveR?dx:-dx)*2;
-      if(moveT||moveB) h = startFrame.h + (moveB?dy:-dy)*2;
+      if(moveL||moveR) w = startFrame.w + (moveR?dx:-dx);
+      if(moveT||moveB) h = startFrame.h + (moveB?dy:-dy);
       w = Math.max(MIN_CROP, Math.min(maxW, w));
       h = Math.max(MIN_CROP, Math.min(maxH, h));
     } else {
@@ -2112,11 +2140,11 @@
         const dW = moveR?dx:-dx;
         const dH = (moveB?dy:-dy) * R;
         const d = Math.abs(dW) > Math.abs(dH) ? dW : dH;
-        w = Math.max(MIN_CROP, startFrame.w + d*2);
+        w = Math.max(MIN_CROP, startFrame.w + d);
       } else if(moveL||moveR){
-        w = Math.max(MIN_CROP, startFrame.w + (moveR?dx:-dx)*2);
+        w = Math.max(MIN_CROP, startFrame.w + (moveR?dx:-dx));
       } else {
-        h = Math.max(MIN_CROP, startFrame.h + (moveB?dy:-dy)*2);
+        h = Math.max(MIN_CROP, startFrame.h + (moveB?dy:-dy));
         w = h*R;
       }
       if(isCorner || moveL || moveR) h = w/R;
@@ -2126,21 +2154,55 @@
     }
     return {w, h};
   }
+  // Re-fits whatever is currently selected (frame's own aspect ratio, and the
+  // exact image-space rectangle it covers) to fill the crop viewport, without
+  // changing which pixels are selected — used by the 자동 확대 toggle after
+  // every handle-resize.
+  function zoomToFitFrame(){
+    if(!frameW || !frameH || !mainCanvas.width || !mainCanvas.height) return;
+    const R = frameW/frameH;
+    const cx = mainCanvas.width/2 - imgOffsetX/imgScale;
+    const cy = mainCanvas.height/2 - imgOffsetY/imgScale;
+    const wImg = frameW/imgScale, hImg = frameH/imgScale;
+    const sz = defaultFrameSize(R);
+    frameW = sz.w; frameH = sz.h; // tentative, so minImgScale() below reflects the new frame size
+    imgScale = clampImgScale(sz.w/wImg);
+    imgOffsetX = (mainCanvas.width/2 - cx) * imgScale;
+    imgOffsetY = (mainCanvas.height/2 - cy) * imgScale;
+    clampImgOffset();
+    renderCropFrame();
+  }
 
   document.querySelectorAll('.crop-handle').forEach(handle=>{
+    const h = handle.dataset.handle;
+    const moveT = h.includes('n'), moveB = h.includes('s');
+    const moveL = h.includes('w'), moveR = h.includes('e');
     attachGestureAwareDrag(handle, {
       start(e){
         e.preventDefault(); e.stopPropagation();
-        return { startX:e.clientX, startY:e.clientY, startFrame:{w:frameW,h:frameH} };
+        return { startX:e.clientX, startY:e.clientY, startFrame:{w:frameW,h:frameH}, startOffX:imgOffsetX, startOffY:imgOffsetY };
       },
       move(e2, hctx){
         const dx = e2.clientX-hctx.startX, dy = e2.clientY-hctx.startY;
-        const sz = resizeFrame(handle.dataset.handle, dx, dy, hctx.startFrame);
+        const sz = resizeFrame(h, dx, dy, hctx.startFrame);
+        const deltaW = sz.w - hctx.startFrame.w, deltaH = sz.h - hctx.startFrame.h;
         frameW = sz.w; frameH = sz.h;
+        // The frame is always re-centered in the viewport by CSS, so growing/
+        // shrinking it would otherwise move BOTH edges symmetrically. Shifting
+        // the image by half the size delta (in the direction opposite the
+        // dragged edge) cancels that for the edge that should stay anchored —
+        // only the edge under the user's hand actually moves against the image.
+        if(moveR) imgOffsetX = hctx.startOffX - deltaW/2;
+        else if(moveL) imgOffsetX = hctx.startOffX + deltaW/2;
+        if(moveB) imgOffsetY = hctx.startOffY - deltaH/2;
+        else if(moveT) imgOffsetY = hctx.startOffY + deltaH/2;
         imgScale = clampImgScale(imgScale);
         clampImgOffset();
         sessionDirty = true;
         renderCropFrame();
+      },
+      end(){
+        if(cropAutoZoom) zoomToFitFrame();
       }
     });
   });
