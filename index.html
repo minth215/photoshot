@@ -105,7 +105,7 @@
     background-color:#101214;
   }
   .canvas-holder{position:relative;box-shadow:0 8px 30px rgba(0,0,0,.5);}
-  .canvas-holder canvas{display:block;}
+  .canvas-holder canvas:not([hidden]){display:block;}
   #overlayCanvas{position:absolute;top:0;left:0;touch-action:none;}
   .canvas-holder.crop-mode{overflow:hidden;}
   .canvas-holder.crop-mode #mainCanvas{position:absolute;}
@@ -2206,6 +2206,7 @@
   function renderCircleCropMask(){
     if(!circleCropToggle.checked || cropRatio!==1){
       circleCropMask.hidden = true;
+      circleCropMaskCtx.clearRect(0,0,circleCropMask.width,circleCropMask.height);
       return;
     }
     const w = Math.max(1, Math.round(frameW)), h = Math.max(1, Math.round(frameH));
