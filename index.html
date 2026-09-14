@@ -127,6 +127,7 @@
     box-shadow:0 0 0 9999px rgba(0,0,0,.55);
     border:1px solid rgba(255,255,255,.9);
   }
+  .circle-crop-mask{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
   .crop-gridline{position:absolute;background:rgba(255,255,255,.35);pointer-events:none;}
   .crop-gridline.v1{left:33.333%;top:0;bottom:0;width:1px;}
   .crop-gridline.v2{left:66.666%;top:0;bottom:0;width:1px;}
@@ -272,7 +273,7 @@
   .pct-box{position:relative;flex:0 0 auto;}
   .pct-box input[type=number]{width:60px;padding-right:16px;text-align:right;}
   .pct-box::after{content:'%';position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-dim);pointer-events:none;}
-  .checkline{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:var(--text-dim);}
+  .checkline:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:var(--text-dim);}
   .toggle-btn{width:100%;}
   /* iOS-style toggle switch: a hidden checkbox drives the visual track/thumb via :checked */
   .switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;cursor:pointer;}
@@ -415,6 +416,7 @@
       <canvas id="overlayCanvas"></canvas>
       <div class="crop-frame" id="cropFrame" hidden>
         <div class="crop-rect" id="cropFrameRect">
+          <canvas class="circle-crop-mask" id="circleCropMask" hidden></canvas>
           <div class="crop-gridline v1"></div><div class="crop-gridline v2"></div>
           <div class="crop-gridline h1"></div><div class="crop-gridline h2"></div>
           <div class="crop-handle edge n" data-handle="n"></div>
@@ -501,6 +503,13 @@
           <button class="ratio-btn" type="button" data-ratio="3:4">3:4</button>
           <button class="ratio-btn" type="button" data-ratio="3:2">3:2</button>
           <button class="ratio-btn" type="button" data-ratio="16:9">16:9</button>
+        </div>
+        <div class="checkline" id="circleCropRow" hidden>
+          <span>원형 크롭 미리보기</span>
+          <label class="switch">
+            <input type="checkbox" id="circleCropToggle">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
         </div>
         <div class="rotate-wrap">
           <div class="rotate-value" id="rotateValue">0°</div>
@@ -1394,6 +1403,9 @@
     lockAspectToggle.checked = true;
     cropAutoZoom = true;
     cropAutoZoomToggle.checked = true;
+    circleCropToggle.checked = false;
+    circleCropRow.hidden = true;
+    circleCropMask.hidden = true;
     featherToggle.checked = false;
     featherWrap.style.display = 'none';
     featherOnMask = null;
@@ -2123,6 +2135,10 @@
   // the fixed frame; only ratio buttons and handle drags change the frame's size.
   const cropFrame = document.getElementById('cropFrame');
   const cropFrameRect = document.getElementById('cropFrameRect');
+  const circleCropRow = document.getElementById('circleCropRow');
+  const circleCropToggle = document.getElementById('circleCropToggle');
+  const circleCropMask = document.getElementById('circleCropMask');
+  const circleCropMaskCtx = circleCropMask.getContext('2d');
   const rotateRuler = document.getElementById('rotateRuler');
   const rotateRulerTrack = document.getElementById('rotateRulerTrack');
   const rotateValueEl = document.getElementById('rotateValue');
@@ -2181,6 +2197,38 @@
     headerCropSize.textContent = w + ' × ' + h + ' px';
   }
 
+  // Purely a visual preview of what a circular crop would look like — only
+  // offered for the 1:1 ratio, and never affects the actual crop pixels
+  // applyCropAction() produces (still a plain square). Paints black over the
+  // square frame everywhere except an inscribed circle, using
+  // destination-out to punch the circle out as a transparent hole so the
+  // dark app background shows through it (reads as "cut away").
+  function renderCircleCropMask(){
+    if(!circleCropToggle.checked || cropRatio!==1){
+      circleCropMask.hidden = true;
+      return;
+    }
+    const w = Math.max(1, Math.round(frameW)), h = Math.max(1, Math.round(frameH));
+    circleCropMask.width = w; circleCropMask.height = h;
+    circleCropMaskCtx.clearRect(0,0,w,h);
+    circleCropMaskCtx.globalCompositeOperation = 'source-over';
+    circleCropMaskCtx.fillStyle = '#000';
+    circleCropMaskCtx.fillRect(0,0,w,h);
+    circleCropMaskCtx.globalCompositeOperation = 'destination-out';
+    circleCropMaskCtx.beginPath();
+    circleCropMaskCtx.arc(w/2, h/2, Math.min(w,h)/2, 0, Math.PI*2);
+    circleCropMaskCtx.fill();
+    circleCropMaskCtx.globalCompositeOperation = 'source-over';
+    circleCropMask.hidden = false;
+  }
+  function updateCircleCropRowVisibility(){
+    const isSquare = cropRatio===1;
+    circleCropRow.hidden = !isSquare;
+    if(!isSquare) circleCropToggle.checked = false;
+    renderCircleCropMask();
+  }
+  circleCropToggle.addEventListener('change', renderCircleCropMask);
+
   function renderCropFrame(){
     if(!cropModeActive) return;
     cropFrameRect.style.left = ((cropViewportW-frameW)/2)+'px';
@@ -2193,6 +2241,7 @@
     mainCanvas.style.width = dispW+'px';
     mainCanvas.style.height = dispH+'px';
     updateCropSizeReadout();
+    renderCircleCropMask();
   }
 
   function showCropFrame(){
@@ -2223,6 +2272,8 @@
     }
     cropAutoZoom = true;
     cropAutoZoomToggle.checked = true;
+    circleCropToggle.checked = false;
+    updateCircleCropRowVisibility();
     cropFrame.hidden = false;
     renderCropFrame();
   }
@@ -2247,6 +2298,7 @@
       const rv = btn.dataset.ratio;
       cropRatio = rv==='free' ? null : rv==='original' ? (mainCanvas.width/mainCanvas.height) : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
       resetCropView();
+      updateCircleCropRowVisibility();
       sessionDirty = true;
       renderCropFrame();
     });
