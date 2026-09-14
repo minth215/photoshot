@@ -126,16 +126,16 @@
   .crop-gridline.h1{top:33.333%;left:0;right:0;height:1px;}
   .crop-gridline.h2{top:66.666%;left:0;right:0;height:1px;}
   .crop-handle{position:absolute;pointer-events:auto;touch-action:none;}
-  .crop-handle.corner{width:22px;height:22px;}
+  .crop-handle.corner{width:30px;height:30px;}
   .crop-handle.corner::after{content:'';position:absolute;width:16px;height:16px;border:3px solid #fff;}
-  .crop-handle.nw{top:-11px;left:-11px;cursor:nwse-resize;}
-  .crop-handle.nw::after{top:3px;left:3px;border-right:none;border-bottom:none;}
-  .crop-handle.ne{top:-11px;right:-11px;cursor:nesw-resize;}
-  .crop-handle.ne::after{top:3px;right:3px;border-left:none;border-bottom:none;}
-  .crop-handle.sw{bottom:-11px;left:-11px;cursor:nesw-resize;}
-  .crop-handle.sw::after{bottom:3px;left:3px;border-right:none;border-top:none;}
-  .crop-handle.se{bottom:-11px;right:-11px;cursor:nwse-resize;}
-  .crop-handle.se::after{bottom:3px;right:3px;border-left:none;border-top:none;}
+  .crop-handle.nw{top:-15px;left:-15px;cursor:nwse-resize;}
+  .crop-handle.nw::after{top:15px;left:15px;border-right:none;border-bottom:none;}
+  .crop-handle.ne{top:-15px;right:-15px;cursor:nesw-resize;}
+  .crop-handle.ne::after{top:15px;right:15px;border-left:none;border-bottom:none;}
+  .crop-handle.sw{bottom:-15px;left:-15px;cursor:nesw-resize;}
+  .crop-handle.sw::after{bottom:15px;left:15px;border-right:none;border-top:none;}
+  .crop-handle.se{bottom:-15px;right:-15px;cursor:nwse-resize;}
+  .crop-handle.se::after{bottom:15px;right:15px;border-left:none;border-top:none;}
   .crop-handle.n{top:-11px;left:50%;width:40px;height:22px;margin-left:-20px;cursor:ns-resize;}
   .crop-handle.s{bottom:-11px;left:50%;width:40px;height:22px;margin-left:-20px;cursor:ns-resize;}
   .crop-handle.e{right:-11px;top:50%;width:22px;height:40px;margin-top:-20px;cursor:ew-resize;}
@@ -166,7 +166,10 @@
     box-shadow:-2px 4px 16px rgba(0,0,0,.45);
   }
   .layer-panel.collapsed{display:none;}
-  .layer-panel-header{padding:9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);}
+  .layer-panel-header{padding:9px 8px 9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .layer-add-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
+  .layer-add-btn:hover{color:var(--accent);background:rgba(79,209,197,.12);}
+  .layer-add-btn svg{width:17px;height:17px;}
   .layer-list{overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:4px;}
   .layer-row{
     display:grid;grid-template-columns:28px 1fr auto auto;grid-template-rows:auto auto auto;
@@ -251,8 +254,15 @@
   .pct-box{position:relative;flex:0 0 auto;}
   .pct-box input[type=number]{width:60px;padding-right:16px;text-align:right;}
   .pct-box::after{content:'%';position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--text-dim);pointer-events:none;}
-  .checkline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);}
+  .checkline{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:var(--text-dim);}
   .toggle-btn{width:100%;}
+  /* iOS-style toggle switch: a hidden checkbox drives the visual track/thumb via :checked */
+  .switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;cursor:pointer;}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;}
+  .switch-track{position:absolute;inset:0;background:var(--line);border-radius:13px;transition:background .15s;pointer-events:none;}
+  .switch-thumb{position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .15s;pointer-events:none;}
+  .switch input:checked + .switch-track{background:var(--accent);}
+  .switch input:checked + .switch-track .switch-thumb{transform:translateX(20px);}
   #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;width:100%;height:auto;display:block;touch-action:none;}
   footer{
     padding:8px 18px;border-top:1px solid var(--line);background:var(--panel);
@@ -373,7 +383,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 21 7 12 12 3 7"/><polyline points="3 12 12 17 21 12"/><polyline points="3 17 12 22 21 17"/></svg>
     </button>
     <div class="layer-panel collapsed" id="layerPanel">
-      <div class="layer-panel-header">레이어</div>
+      <div class="layer-panel-header">
+        <span>레이어</span>
+        <button type="button" id="addLayerBtn" class="layer-add-btn" title="새 레이어 추가" aria-label="새 레이어 추가">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
       <div class="layer-list" id="layerList"></div>
     </div>
   </div>
@@ -381,18 +396,6 @@
   <aside id="sidePanel" style="display:none;">
 
     <nav class="mobile-tabbar" id="mobileTabBar">
-      <button class="tab-btn" type="button" data-target="group-draw">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-        <span>그리기</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-bgremove">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
-        <span>배경 제거</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-selection">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
-        <span>선택영역</span>
-      </button>
       <button class="tab-btn" type="button" data-target="group-crop">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
         <span>크롭</span>
@@ -417,91 +420,26 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M4 18c4-1 6-10 16-14"/></svg>
         <span>곡선</span>
       </button>
+      <button class="tab-btn" type="button" data-target="group-draw">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        <span>그리기</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-selection">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
+        <span>선택영역</span>
+      </button>
+      <button class="tab-btn" type="button" data-target="group-bgremove">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
+        <span>배경 제거</span>
+      </button>
     </nav>
-
-    <details class="group collapsed" id="group-draw" open>
-      <summary>그리기</summary>
-      <div class="group-body">
-        <label class="field"><span class="row"><span>색상</span></span>
-          <input type="color" id="drawColor" value="#4fd1c5">
-        </label>
-        <div class="ratio-row">
-          <button class="ratio-btn active" type="button" data-brushtype="round">원형</button>
-          <button class="ratio-btn" type="button" data-brushtype="square">사각형</button>
-        </div>
-        <label class="field">
-          <span class="row"><span>브러쉬 크기</span><span id="drawSizeVal">30</span></span>
-          <input type="range" id="drawSize" min="1" max="200" value="30">
-        </label>
-        <label class="field">
-          <span class="row"><span>경도</span><span id="drawHardnessVal">80</span></span>
-          <input type="range" id="drawHardness" min="0" max="100" value="80">
-        </label>
-        <label class="field">
-          <span class="row"><span>노출</span><span id="drawExposureVal">100</span></span>
-          <input type="range" id="drawExposure" min="1" max="100" value="100">
-        </label>
-      </div>
-    </details>
-
-    <details class="group collapsed" id="group-bgremove" open>
-      <summary>배경 제거</summary>
-      <div class="group-body">
-        <div class="toolrow">
-          <button class="toolbtn" type="button" data-bgtool="add" title="이 부분은 남깁니다 (복원)">+</button>
-          <button class="toolbtn" type="button" data-bgtool="sub" title="이 부분은 제거합니다">−</button>
-        </div>
-        <label class="field">
-          <span class="row"><span>브러쉬 크기</span><span id="bgBrushSizeVal">50</span></span>
-          <input type="range" id="bgBrushSize" min="4" max="250" value="50">
-        </label>
-        <label class="field">
-          <span class="row"><span>브러쉬 경도</span><span id="bgBrushHardnessVal">70</span></span>
-          <input type="range" id="bgBrushHardness" min="0" max="100" value="70">
-        </label>
-        <div class="btnrow">
-          <button id="bgAutoBtn" type="button">자동 감지 다시 적용</button>
-          <button id="bgResetBtn" class="ghost" type="button">전체 복원</button>
-        </div>
-      </div>
-    </details>
-
-    <details class="group collapsed" id="group-selection" open>
-      <summary>선택 영역</summary>
-      <div class="group-body">
-        <div class="toolrow">
-          <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
-          <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
-          <button class="toolbtn" data-tool="brush-sub" title="브러쉬로 선택 영역을 뺍니다">브러쉬 -</button>
-        </div>
-        <label class="field" id="brushSizeWrap" style="display:none;">
-          <span class="row"><span>브러쉬 크기</span><span id="brushSizeVal">40</span></span>
-          <input type="range" id="brushSize" min="4" max="200" value="40">
-        </label>
-        <label class="field" id="brushHardnessWrap" style="display:none;">
-          <span class="row"><span>브러쉬 경도</span><span id="brushHardnessVal">80</span></span>
-          <input type="range" id="brushHardness" min="0" max="100" value="80">
-        </label>
-        <label class="field">
-          <span class="row"><span>페더(가장자리 부드럽게)</span><span id="featherVal">0</span></span>
-          <input type="range" id="featherRange" min="0" max="80" value="0">
-        </label>
-        <div class="btnrow">
-          <button id="invertSelBtn">선택 반전</button>
-          <button id="clearSelBtn" class="ghost">선택 해제</button>
-        </div>
-        <div class="checkline">
-          <input type="checkbox" id="showSelOverlay" checked>
-          <label for="showSelOverlay">선택 영역 표시 (파란 음영)</label>
-        </div>
-      </div>
-    </details>
 
     <details class="group collapsed" id="group-crop" open>
       <summary>크롭</summary>
       <div class="group-body">
         <div class="ratio-row">
           <button class="ratio-btn active" type="button" data-ratio="free">자유</button>
+          <button class="ratio-btn" type="button" data-ratio="original">원본 비율</button>
           <button class="ratio-btn" type="button" data-ratio="1:1">정사각형</button>
           <button class="ratio-btn" type="button" data-ratio="3:4">3:4</button>
           <button class="ratio-btn" type="button" data-ratio="3:2">3:2</button>
@@ -528,7 +466,13 @@
             <input type="number" id="resizeH" min="1">
           </label>
         </div>
-        <button type="button" id="lockAspectToggle" class="toggle-btn active" aria-pressed="true">가로세로 비율 고정</button>
+        <div class="checkline">
+          <span>가로세로 비율 고정</span>
+          <label class="switch">
+            <input type="checkbox" id="lockAspectToggle" checked>
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
       </div>
     </details>
 
@@ -553,16 +497,16 @@
         <div class="effect-detail" id="effectDetailBlur" hidden>
           <button type="button" class="effect-back" data-effect-back>← 목록으로</button>
           <label class="field">
-            <span class="row"><span>가우시안 블러</span><span id="blurVal">0</span></span>
-            <input type="range" id="blurRange" min="0" max="30" value="0">
+            <span class="row"><span>가우시안 블러</span><span id="blurVal">3</span></span>
+            <input type="range" id="blurRange" min="0" max="30" value="3">
           </label>
         </div>
 
         <div class="effect-detail" id="effectDetailNoise" hidden>
           <button type="button" class="effect-back" data-effect-back>← 목록으로</button>
           <label class="field">
-            <span class="row"><span>노이즈 추가</span><span id="noiseVal">0</span></span>
-            <input type="range" id="noiseRange" min="0" max="100" value="0">
+            <span class="row"><span>노이즈 추가</span><span id="noiseVal">12</span></span>
+            <input type="range" id="noiseRange" min="0" max="100" value="12">
           </label>
           <div class="checkline">
             <input type="checkbox" id="noiseMono">
@@ -649,6 +593,94 @@
         <canvas id="curveCanvas" width="256" height="130"></canvas>
         <div class="btnrow">
           <button id="resetCurveBtn" class="ghost">곡선 초기화</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="group collapsed" id="group-draw" open>
+      <summary>그리기</summary>
+      <div class="group-body">
+        <label class="field"><span class="row"><span>색상</span></span>
+          <input type="color" id="drawColor" value="#4fd1c5">
+        </label>
+        <div class="ratio-row">
+          <button class="ratio-btn active" type="button" data-brushtype="round">원형</button>
+          <button class="ratio-btn" type="button" data-brushtype="square">사각형</button>
+        </div>
+        <label class="field">
+          <span class="row"><span>브러쉬 크기</span><span id="drawSizeVal">30</span></span>
+          <input type="range" id="drawSize" min="1" max="200" value="30">
+        </label>
+        <label class="field">
+          <span class="row"><span>경도</span><span id="drawHardnessVal">80</span></span>
+          <input type="range" id="drawHardness" min="0" max="100" value="80">
+        </label>
+        <label class="field">
+          <span class="row"><span>노출</span><span id="drawExposureVal">100</span></span>
+          <input type="range" id="drawExposure" min="1" max="100" value="100">
+        </label>
+      </div>
+    </details>
+
+    <details class="group collapsed" id="group-selection" open>
+      <summary>선택 영역</summary>
+      <div class="group-body">
+        <div class="toolrow">
+          <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
+          <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
+          <button class="toolbtn" data-tool="brush-sub" title="브러쉬로 선택 영역을 뺍니다">브러쉬 -</button>
+        </div>
+        <label class="field" id="brushSizeWrap" style="display:none;">
+          <span class="row"><span>브러쉬 크기</span><span id="brushSizeVal">40</span></span>
+          <input type="range" id="brushSize" min="4" max="200" value="40">
+        </label>
+        <label class="field" id="brushHardnessWrap" style="display:none;">
+          <span class="row"><span>브러쉬 경도</span><span id="brushHardnessVal">80</span></span>
+          <input type="range" id="brushHardness" min="0" max="100" value="80">
+        </label>
+        <div class="checkline">
+          <span>페더</span>
+          <label class="switch">
+            <input type="checkbox" id="featherToggle">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+        <label class="field" id="featherWrap" style="display:none;">
+          <span class="row"><span>페더 양</span><span id="featherVal">20</span></span>
+          <input type="range" id="featherRange" min="0" max="80" value="20">
+        </label>
+        <div class="btnrow">
+          <button id="invertSelBtn">선택 반전</button>
+          <button id="clearSelBtn" class="ghost">선택 해제</button>
+        </div>
+        <div class="checkline">
+          <span>선택 영역 표시</span>
+          <label class="switch">
+            <input type="checkbox" id="showSelOverlay" checked>
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <details class="group collapsed" id="group-bgremove" open>
+      <summary>배경 제거</summary>
+      <div class="group-body">
+        <div class="toolrow">
+          <button class="toolbtn" type="button" data-bgtool="add" title="이 부분은 남깁니다 (복원)">+</button>
+          <button class="toolbtn" type="button" data-bgtool="sub" title="이 부분은 제거합니다">−</button>
+        </div>
+        <label class="field">
+          <span class="row"><span>브러쉬 크기</span><span id="bgBrushSizeVal">50</span></span>
+          <input type="range" id="bgBrushSize" min="4" max="250" value="50">
+        </label>
+        <label class="field">
+          <span class="row"><span>브러쉬 경도</span><span id="bgBrushHardnessVal">70</span></span>
+          <input type="range" id="bgBrushHardness" min="0" max="100" value="70">
+        </label>
+        <div class="btnrow">
+          <button id="bgAutoBtn" type="button">자동 감지 다시 적용</button>
+          <button id="bgResetBtn" class="ghost" type="button">전체 복원</button>
         </div>
       </div>
     </details>
@@ -934,6 +966,16 @@
     layerPanel.classList.toggle('collapsed');
     layerToggleBtn.classList.toggle('active', !layerPanel.classList.contains('collapsed'));
   });
+  const addLayerBtn = document.getElementById('addLayerBtn');
+  addLayerBtn.addEventListener('click', ()=>{
+    if(!mainCanvas.width || !mainCanvas.height) return;
+    pushUndo(snapshotState());
+    const layer = createLayer('레이어 '+(layers.length+1), mainCanvas.width, mainCanvas.height);
+    layers.push(layer);
+    activeLayerId = layer.id;
+    compositeLayers();
+    renderLayerPanel();
+  });
 
   function setCanvasSize(w,h){
     const dimsChanged = (mainCanvas.width!==w || mainCanvas.height!==h);
@@ -1144,7 +1186,7 @@
     undoStack=[];
     redoStack=[];
     editingSnapshot=null;
-    layers=[]; activeLayerId=null; drawLayerId=null;
+    layers=[]; activeLayerId=null;
     strokeUndoStack=[]; strokeRedoStack=[];
     updateDrawHistoryButtons();
     layerPanel.classList.add('collapsed');
@@ -1166,8 +1208,10 @@
     document.querySelectorAll('#group-crop .ratio-btn').forEach(b=> b.classList.toggle('active', b.dataset.ratio==='free'));
     updateRulerUI();
     lockAspectOn = true;
-    lockAspectToggle.classList.add('active');
-    lockAspectToggle.setAttribute('aria-pressed','true');
+    lockAspectToggle.checked = true;
+    featherToggle.checked = false;
+    featherWrap.style.display = 'none';
+    featherOnMask = null;
     updateHistoryButtons();
     downloadBtn.disabled=true;
     closeBtn.disabled=true;
@@ -1238,8 +1282,10 @@
       const out = octx.createImageData(w,h);
       for(let i=0;i<maskData.length;i+=4){
         const a = maskData[i+3];
-        const tintAlpha = (255-a) * 0.38;
-        out.data[i]=10; out.data[i+1]=120; out.data[i+2]=255; out.data[i+3]=tintAlpha;
+        // Unselected area gets a darker, more opaque tint than before so it
+        // reads as visibly dimmed, not just faintly blue-tinted.
+        const tintAlpha = (255-a) * 0.5;
+        out.data[i]=6; out.data[i+1]=10; out.data[i+2]=22; out.data[i+3]=tintAlpha;
       }
       octx.putImageData(out,0,0);
     }
@@ -1274,26 +1320,48 @@
     renderSelectionOverlay();
   });
 
-  // feather (live preview against the mask as it was when the drag started)
+  // Feather: toggled on/off via a switch. Turning it on captures the mask as
+  // it was right then (still sharp) as a fixed baseline — the slider always
+  // feathers FROM that baseline (never compounding blur on itself), and
+  // turning it back off restores that exact baseline.
+  const featherWrap = document.getElementById('featherWrap');
+  const featherToggle = document.getElementById('featherToggle');
   const featherRange = document.getElementById('featherRange');
-  let featherBaseMask = null;
-  featherRange.addEventListener('pointerdown', ()=>{
+  let featherOnMask = null;
+  featherToggle.addEventListener('change', ()=>{
     beginEdit();
     ensureMaskInitialized();
-    featherBaseMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+    sessionDirty = true;
+    if(featherToggle.checked){
+      featherWrap.style.display = '';
+      featherOnMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+      featherRange.value = 20;
+      document.getElementById('featherVal').textContent = '20';
+      const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, 20);
+      mctx.putImageData(blurred,0,0);
+    } else {
+      featherWrap.style.display = 'none';
+      if(featherOnMask) mctx.putImageData(featherOnMask,0,0);
+      featherOnMask = null;
+    }
+    renderSelectionOverlay();
   });
   featherRange.addEventListener('input', ()=>{
     document.getElementById('featherVal').textContent = featherRange.value;
-    if(!featherBaseMask) return;
+    if(!featherOnMask) return;
     sessionDirty = true;
     const r = parseInt(featherRange.value,10);
-    const blurred = boxBlurAlpha(featherBaseMask, maskCanvas.width, maskCanvas.height, r);
+    const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, r);
     mctx.putImageData(blurred,0,0);
     renderSelectionOverlay();
   });
-  featherRange.addEventListener('pointerup', ()=>{
-    featherBaseMask=null;
-  });
+  function resetFeatherUI(){
+    featherToggle.checked = false;
+    featherWrap.style.display = 'none';
+    featherOnMask = null;
+  }
+  function applySelectionAction(){ commitEdit(); resetFeatherUI(); }
+  function cancelSelectionAction(){ cancelEdit(); resetFeatherUI(); }
 
   // ---------- Lasso & Brush interaction ----------
   let lassoPoints = [];
@@ -1466,16 +1534,6 @@
   }
 
   // A single dedicated drawing layer is created lazily on the very first
-  // stroke ever made, then reused by every later 그리기 session — stored as
-  // an id (not the layer object) and looked up fresh in `layers` each time,
-  // so it stays correct no matter how many times `layers` gets rebuilt from
-  // a snapshot in between (undo/redo, resize, crop, rotate, …). If that id
-  // no longer resolves (e.g. undone past its creation), the next stroke just
-  // creates a new one, same as the very first stroke of a fresh document.
-  // Without this, drawing again after applying an effect to the draw layer
-  // would spawn a second, unaffected layer on top of the already-edited one
-  // instead of continuing on it.
-  let drawLayerId = null;
   let drawingActive = false;
   let lastDrawPos = null;
 
@@ -1505,25 +1563,15 @@
     updateDrawHistoryButtons();
   });
 
-  function ensureDrawLayer(){
-    if(drawLayerId){
-      const existing = layers.find(l=>l.id===drawLayerId);
-      if(existing){
-        activeLayerId = existing.id;
-        return existing;
-      }
-    }
-    const layer = createLayer('그리기 레이어', mainCanvas.width, mainCanvas.height);
-    layers.push(layer);
-    activeLayerId = layer.id;
-    drawLayerId = layer.id;
-    renderLayerPanel();
-    return layer;
-  }
   function paintDrawDab(x,y){
     if(!editingSnapshot) return;
+    // Paint onto whichever layer was active when this 그리기 session began —
+    // no automatic layer creation. Key off the session's pinned layer (not
+    // whatever is active right now) so the layer panel can still be opened
+    // mid-session, matching previewEffect's pattern.
+    const layer = layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layer || layer.locked) return;
     sessionDirty = true;
-    const layer = ensureDrawLayer();
     const size = parseInt(drawSizeInput.value,10);
     const hardness = parseInt(drawHardnessInput.value,10)/100;
     const exposure = parseInt(drawExposureInput.value,10)/100;
@@ -1747,10 +1795,8 @@
   const lockAspectToggle = document.getElementById('lockAspectToggle');
   let aspect = 1;
   let lockAspectOn = true;
-  lockAspectToggle.addEventListener('click', ()=>{
-    lockAspectOn = !lockAspectOn;
-    lockAspectToggle.classList.toggle('active', lockAspectOn);
-    lockAspectToggle.setAttribute('aria-pressed', String(lockAspectOn));
+  lockAspectToggle.addEventListener('change', ()=>{
+    lockAspectOn = lockAspectToggle.checked;
   });
   function syncResizeInputs(){
     resizeW.value = mainCanvas.width;
@@ -1906,12 +1952,13 @@
 
   function defaultFrameSize(R){
     const vw = cropViewportW, vh = cropViewportH;
-    let w, h;
-    if(R==null){ w = vw*0.8; h = vh*0.8; }
-    else {
-      w = vw*0.85; h = w/R;
-      if(h > vh*0.85){ h = vh*0.85; w = h*R; }
-    }
+    // Free mode (R==null) has no ratio lock of its own, but its DEFAULT frame
+    // must still match the image's own aspect ratio so the initial crop region
+    // covers the whole photo (no pixels truncated) — only the fill margin
+    // differs from a purely cosmetic scale, not from any actual cropping.
+    const effR = (R==null) ? (mainCanvas.width / mainCanvas.height) : R;
+    let w = vw*0.85, h = w/effR;
+    if(h > vh*0.85){ h = vh*0.85; w = h*effR; }
     return { w: Math.max(MIN_CROP, w), h: Math.max(MIN_CROP, h) };
   }
 
@@ -1997,7 +2044,7 @@
       document.querySelectorAll('#group-crop .ratio-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       const rv = btn.dataset.ratio;
-      cropRatio = rv==='free' ? null : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
+      cropRatio = rv==='free' ? null : rv==='original' ? (mainCanvas.width/mainCanvas.height) : (()=>{ const [a,b]=rv.split(':').map(Number); return a/b; })();
       resetCropView();
       sessionDirty = true;
       renderCropFrame();
@@ -2354,9 +2401,9 @@
   noiseMonoChk.addEventListener('change', runEffectsPreview);
   bwRange.addEventListener('input', ()=>{document.getElementById('bwVal').textContent=bwRange.value; runEffectsPreview();});
   function resetEffectsInputs(){
-    blurRange.value=0; noiseRange.value=0; bwRange.value=0; noiseMonoChk.checked=false;
-    document.getElementById('blurVal').textContent='0';
-    document.getElementById('noiseVal').textContent='0';
+    blurRange.value=3; noiseRange.value=12; bwRange.value=0; noiseMonoChk.checked=false;
+    document.getElementById('blurVal').textContent='3';
+    document.getElementById('noiseVal').textContent='12';
     document.getElementById('bwVal').textContent='0';
   }
   function applyEffectsAction(){ commitEdit(); resetEffectsInputs(); }
@@ -2374,6 +2421,9 @@
     const map = {blur:'effectDetailBlur', noise:'effectDetailNoise', bw:'effectDetailBw'};
     const el = document.getElementById(map[name]);
     if(el) el.hidden = false;
+    // The blur/noise sliders now start at a non-zero default, so the preview
+    // must render immediately on entry instead of waiting for the first drag.
+    if(name==='blur' || name==='noise') runEffectsPreview();
   }
   document.querySelectorAll('.effect-tile').forEach(tile=>{
     tile.addEventListener('click', ()=> showEffectDetail(tile.dataset.effect));
@@ -2468,7 +2518,10 @@
     }
     w.white = Math.max(0, Math.min(1, (L-0.5)/0.5));
     w.black = Math.max(0, Math.min(1, (0.5-L)/0.5));
-    w.neutral = Math.max(0, 1 - Math.abs(L-0.5)*2);
+    // Neutrals means desaturated grays, not just "medium lightness" — without the
+    // (1-sat) factor a fully saturated mid-lightness color (pure red, pure
+    // yellow, ...) would incorrectly get full weight here too.
+    w.neutral = Math.max(0, 1 - Math.abs(L-0.5)*2) * (1-sat);
     return w;
   }
   function scAggregate(r,g,b){
@@ -2630,16 +2683,51 @@
       }
       return lut;
     }
+    // Monotonic cubic Hermite spline (Fritsch–Carlson): unlike a plain
+    // Catmull-Rom spline, tangents are derived from — and then clamped
+    // against — each segment's own secant slope, so a segment never
+    // overshoots into a sharp kink or an unnaturally sharp bend the way
+    // Catmull-Rom can depending on how its neighbors happen to be placed.
+    // This makes every added point bend smoothly and consistently.
+    const n = pts.length;
+    const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+    const dx = new Array(n-1), m = new Array(n-1);
+    for(let i=0;i<n-1;i++){
+      dx[i] = Math.max(1e-6, xs[i+1]-xs[i]);
+      m[i] = (ys[i+1]-ys[i])/dx[i];
+    }
+    const tang = new Array(n);
+    tang[0] = m[0];
+    tang[n-1] = m[n-2];
+    for(let i=1;i<n-1;i++){
+      if(m[i-1]===0 || m[i]===0 || (m[i-1]<0)!==(m[i]<0)){
+        tang[i] = 0;
+      } else {
+        const w1 = 2*dx[i]+dx[i-1], w2 = dx[i]+2*dx[i-1];
+        tang[i] = (w1+w2)/(w1/m[i-1] + w2/m[i]);
+      }
+    }
+    for(let i=0;i<n-1;i++){
+      if(m[i]===0){ tang[i]=0; tang[i+1]=0; continue; }
+      const a = tang[i]/m[i], b = tang[i+1]/m[i];
+      if(a<0) tang[i]=0;
+      if(b<0) tang[i+1]=0;
+      const s = a*a+b*b;
+      if(s>9){
+        const scale = 3/Math.sqrt(s);
+        tang[i] = scale*a*m[i];
+        tang[i+1] = scale*b*m[i];
+      }
+    }
+    let seg = 0;
     for(let x=0;x<256;x++){
-      let i=0;
-      while(i<pts.length-2 && pts[i+1][0]<x) i++;
-      const p0 = pts[Math.max(0,i-1)], p1=pts[i], p2=pts[Math.min(pts.length-1,i+1)], p3=pts[Math.min(pts.length-1,i+2)];
-      let t = (p2[0]===p1[0]) ? 0 : (x-p1[0])/(p2[0]-p1[0]);
+      while(seg<n-2 && x>xs[seg+1]) seg++;
+      const h = dx[seg];
+      let t = (x-xs[seg])/h;
       t = Math.min(1,Math.max(0,t));
-      // Catmull-Rom
       const t2=t*t, t3=t2*t;
-      const y = 0.5*((2*p1[1]) + (p2[1]-p0[1])*t + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (3*p1[1]-p0[1]-3*p2[1]+p3[1])*t3);
-      lut[x] = y;
+      const h00=2*t3-3*t2+1, h10=t3-2*t2+t, h01=-2*t3+3*t2, h11=t3-t2;
+      lut[x] = h00*ys[seg] + h10*h*tang[seg] + h01*ys[seg+1] + h11*h*tang[seg+1];
     }
     return lut;
   }
@@ -2652,6 +2740,16 @@
       cctx.beginPath(); cctx.moveTo(gx,0); cctx.lineTo(gx,CURVE_H); cctx.stroke();
       cctx.beginPath(); cctx.moveTo(0,gy); cctx.lineTo(CURVE_W,gy); cctx.stroke();
     }
+    // Always show the original identity line (no adjustment) as a guide,
+    // regardless of how the actual curve below has been bent.
+    cctx.save();
+    cctx.strokeStyle='rgba(231,233,236,.35)'; cctx.lineWidth=1; cctx.setLineDash([4,3]);
+    cctx.beginPath();
+    const [gx0,gy0] = curveToScreen([0,0]), [gx1,gy1] = curveToScreen([255,255]);
+    cctx.moveTo(gx0,gy0); cctx.lineTo(gx1,gy1);
+    cctx.stroke();
+    cctx.restore();
+
     const lut = buildLUT();
     cctx.strokeStyle='#4fd1c5'; cctx.lineWidth=2;
     cctx.beginPath();
@@ -2786,7 +2884,7 @@
   const MENU_SESSION = {
     'group-draw': { commit: applyDrawAction, cancel: cancelDrawAction },
     'group-bgremove': { commit: applyBgRemoveAction, cancel: cancelBgRemoveAction },
-    'group-selection': { commit: commitEdit, cancel: cancelEdit },
+    'group-selection': { commit: applySelectionAction, cancel: cancelSelectionAction },
     'group-crop': { commit: applyCropAction, cancel: cancelCropAction },
     'group-resize': { commit: applyResizeAction, cancel: cancelResizeAction },
     'group-effects': { commit: applyEffectsAction, cancel: cancelEffectsAction },
