@@ -1076,6 +1076,14 @@
 
       row.addEventListener('click', e=>{
         if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
+        // Picking a different layer while a 선택색상/레벨/곡선 session is open
+        // acts like pressing 취소 first — prompting only if something was
+        // actually changed — rather than leaving that session dangling open
+        // underneath the newly-selected layer.
+        if(layer.id!==activeLayerId && ADJUSTMENT_MENU_IDS.has(activeMenuId)){
+          if(sessionDirty && !window.confirm('변경 사항을 삭제할까요?')) return;
+          cancelActiveMenu(false);
+        }
         selectLayer(layer.id);
         if(layer.adjustmentType){
           const menuId = ADJUSTMENT_MENU_ID[layer.adjustmentType];
@@ -2265,6 +2273,7 @@
     previewTargetLayerId = null;
   }
   const ADJUSTMENT_MENU_ID = {sc:'group-sc', levels:'group-levels', curve:'group-curve'};
+  const ADJUSTMENT_MENU_IDS = new Set(Object.values(ADJUSTMENT_MENU_ID));
   // Clicking an adjustment layer in the panel re-opens the menu that created
   // it (already pre-filled with its stored params via beginAdjustmentSession)
   // — mirrors whichever entry path the current layout actually uses (desktop
