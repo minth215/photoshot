@@ -854,6 +854,7 @@
     ['darken','어둡게 하기'],
     ['multiply','곱하기'],
     ['color-burn','색상 번'],
+    ['linear-burn','선형 번'],
     ['lighten','밝게 하기'],
     ['screen','스크린'],
     ['color-dodge','색상 닷지'],
@@ -904,10 +905,47 @@
   function activeLayer(){
     return layers.find(l => l.id===activeLayerId) || layers[layers.length-1] || null;
   }
+  // Blend modes with no native canvas globalCompositeOperation equivalent —
+  // composited manually, per the standard (Cb,Cs) -> B formula, since the
+  // browser has nothing to fall back to for these.
+  const MANUAL_BLEND_MODES = {
+    'linear-burn': (Cb,Cs)=> Math.max(0, Cb+Cs-1)
+  };
+  function compositeManualBlend(blendFn, layerCanvas, opacity){
+    const w = mainCanvas.width, h = mainCanvas.height;
+    if(!w || !h) return;
+    const backdrop = ctx.getImageData(0,0,w,h);
+    const bd = backdrop.data;
+    const sd = layerCanvas.getContext('2d').getImageData(0,0,w,h).data;
+    for(let i=0;i<bd.length;i+=4){
+      const as = (sd[i+3]/255) * opacity;
+      if(as<=0) continue;
+      const ab = bd[i+3]/255;
+      if(ab<=0){
+        bd[i]=sd[i]; bd[i+1]=sd[i+1]; bd[i+2]=sd[i+2]; bd[i+3]=Math.round(as*255);
+        continue;
+      }
+      const ao = as + ab*(1-as);
+      for(let c=0;c<3;c++){
+        const Cb = bd[i+c]/255, Cs = sd[i+c]/255;
+        const B = blendFn(Cb,Cs);
+        const blendedSrc = (1-ab)*Cs + ab*B;
+        const Co = as*blendedSrc + (1-as)*ab*Cb;
+        bd[i+c] = Math.round((Co/ao)*255);
+      }
+      bd[i+3] = Math.round(ao*255);
+    }
+    ctx.putImageData(backdrop,0,0);
+  }
   function compositeLayers(){
     ctx.clearRect(0,0,mainCanvas.width,mainCanvas.height);
     layers.forEach(l=>{
       if(!l.visible) return;
+      const manualBlend = l.blendMode && MANUAL_BLEND_MODES[l.blendMode];
+      if(manualBlend){
+        compositeManualBlend(manualBlend, l.canvas, l.opacity);
+        return;
+      }
       ctx.globalAlpha = l.opacity;
       ctx.globalCompositeOperation = (l.blendMode && l.blendMode!=='normal') ? l.blendMode : 'source-over';
       ctx.drawImage(l.canvas,0,0);
