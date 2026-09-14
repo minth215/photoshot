@@ -768,15 +768,6 @@
   function restoreLayersFrom(snap){
     layers = snap.layers.map(ls => layerFromSnapshot(ls, snap.w, snap.h));
     activeLayerId = snap.activeLayerId;
-    // layers are rebuilt as brand-new objects above, so a stale reference to
-    // the 그리기 session's layer (held while drawing) would otherwise keep
-    // pointing at an orphaned canvas that's no longer part of `layers` —
-    // silently painting into the void. Re-resolve it by id, or drop it if
-    // this restore undid its creation entirely (the next stroke will just
-    // make a new one, same as the first stroke of a fresh session).
-    if(drawLayerForSession){
-      drawLayerForSession = layers.find(l=>l.id===drawLayerForSession.id) || null;
-    }
     compositeLayers();
     renderLayerPanel();
   }
@@ -1153,7 +1144,7 @@
     undoStack=[];
     redoStack=[];
     editingSnapshot=null;
-    layers=[]; activeLayerId=null; drawLayerForSession=null;
+    layers=[]; activeLayerId=null; drawLayerId=null;
     strokeUndoStack=[]; strokeRedoStack=[];
     updateDrawHistoryButtons();
     layerPanel.classList.add('collapsed');
@@ -1474,11 +1465,17 @@
     return [ (n>>16)&255, (n>>8)&255, n&255 ];
   }
 
-  // One new top layer is created on the first stroke of each 그리기 session
-  // (opening the menu again later creates another) — cancelling the session
-  // discards it automatically since restoreState() rebuilds `layers` from the
-  // pre-session snapshot, which never included it.
-  let drawLayerForSession = null;
+  // A single dedicated drawing layer is created lazily on the very first
+  // stroke ever made, then reused by every later 그리기 session — stored as
+  // an id (not the layer object) and looked up fresh in `layers` each time,
+  // so it stays correct no matter how many times `layers` gets rebuilt from
+  // a snapshot in between (undo/redo, resize, crop, rotate, …). If that id
+  // no longer resolves (e.g. undone past its creation), the next stroke just
+  // creates a new one, same as the very first stroke of a fresh document.
+  // Without this, drawing again after applying an effect to the draw layer
+  // would spawn a second, unaffected layer on top of the already-edited one
+  // instead of continuing on it.
+  let drawLayerId = null;
   let drawingActive = false;
   let lastDrawPos = null;
 
@@ -1509,11 +1506,17 @@
   });
 
   function ensureDrawLayer(){
-    if(drawLayerForSession) return drawLayerForSession;
+    if(drawLayerId){
+      const existing = layers.find(l=>l.id===drawLayerId);
+      if(existing){
+        activeLayerId = existing.id;
+        return existing;
+      }
+    }
     const layer = createLayer('그리기 레이어', mainCanvas.width, mainCanvas.height);
     layers.push(layer);
     activeLayerId = layer.id;
-    drawLayerForSession = layer;
+    drawLayerId = layer.id;
     renderLayerPanel();
     return layer;
   }
@@ -1554,7 +1557,6 @@
   }
   function applyDrawAction(){
     commitEdit();
-    drawLayerForSession = null;
     strokeUndoStack = []; strokeRedoStack = [];
     updateDrawHistoryButtons();
   }
@@ -1562,7 +1564,6 @@
     cancelEdit();
     strokeUndoStack = []; strokeRedoStack = [];
     updateDrawHistoryButtons();
-    drawLayerForSession = null;
   }
 
   // ---------- Pinch to zoom + pan + rotate (two fingers) ----------
@@ -2764,7 +2765,6 @@
       if(id==='group-resize') syncResizeInputs();
       if(id==='group-sc') syncSCInputs();
       if(id==='group-draw'){
-        drawLayerForSession = null;
         strokeUndoStack = []; strokeRedoStack = [];
         updateDrawHistoryButtons();
       }
