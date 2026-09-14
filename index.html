@@ -768,6 +768,15 @@
   function restoreLayersFrom(snap){
     layers = snap.layers.map(ls => layerFromSnapshot(ls, snap.w, snap.h));
     activeLayerId = snap.activeLayerId;
+    // layers are rebuilt as brand-new objects above, so a stale reference to
+    // the 그리기 session's layer (held while drawing) would otherwise keep
+    // pointing at an orphaned canvas that's no longer part of `layers` —
+    // silently painting into the void. Re-resolve it by id, or drop it if
+    // this restore undid its creation entirely (the next stroke will just
+    // make a new one, same as the first stroke of a fresh session).
+    if(drawLayerForSession){
+      drawLayerForSession = layers.find(l=>l.id===drawLayerForSession.id) || null;
+    }
     compositeLayers();
     renderLayerPanel();
   }
