@@ -153,6 +153,17 @@
     color:var(--text-dim);text-align:center;font-size:14px;line-height:1.7;
   }
   .empty-state button{margin-top:10px;}
+  .empty-state-actions:not([hidden]){display:flex;flex-direction:column;align-items:center;}
+  .url-import-form:not([hidden]){
+    display:flex;flex-direction:column;gap:8px;margin-top:10px;
+    width:260px;max-width:80vw;margin-left:auto;margin-right:auto;
+  }
+  .url-import-form input[type=url]{
+    background:var(--bg);border:1px solid var(--line);color:var(--text);
+    border-radius:5px;padding:8px 9px;font-size:13px;width:100%;
+  }
+  .url-import-form .btnrow button{margin-top:0;}
+  #urlImportError{color:var(--danger);text-align:left;margin:0;}
 
   /* ---------- Layers (bookmark tab + flyout panel) ---------- */
   .layer-tab-btn{
@@ -366,7 +377,18 @@
   <div class="stage-wrap" id="stageWrap">
     <div class="empty-state" id="emptyState">
       이미지를 업로드하면 편집을 시작할 수 있어요<br>
-      <button class="primary" type="button" onclick="document.getElementById('fileInput').click()">이미지 선택하기</button>
+      <div class="empty-state-actions" id="emptyStateActions">
+        <button class="primary" type="button" onclick="document.getElementById('fileInput').click()">이미지 선택하기</button>
+        <button type="button" id="urlImportBtn" class="ghost">링크로 가져오기</button>
+      </div>
+      <div class="url-import-form" id="urlImportForm" hidden>
+        <input type="url" id="urlImportInput" placeholder="https://example.com/image.jpg" inputmode="url">
+        <div class="btnrow">
+          <button type="button" id="urlImportConfirm" class="primary">가져오기</button>
+          <button type="button" id="urlImportCancel" class="ghost">취소</button>
+        </div>
+        <p class="hint" id="urlImportError" hidden></p>
+      </div>
     </div>
     <div class="canvas-holder" id="canvasHolder" style="display:none;">
       <canvas id="mainCanvas"></canvas>
@@ -1098,40 +1120,106 @@
   }).observe(stageWrap);
 
   // ---------- File loading ----------
+  // Shared by both the local file picker and the URL-import form — takes a
+  // loaded <img> (already decoded) and makes it the document's base layer.
+  function finishImageLoad(img){
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, MAX_DIM / Math.max(w,h));
+    w = Math.round(w*scale); h = Math.round(h*scale);
+    setCanvasSize(w,h);
+    nextLayerId = 1;
+    const baseLayer = createLayer('배경', w, h);
+    baseLayer.ctx.drawImage(img,0,0,w,h);
+    layers = [baseLayer];
+    activeLayerId = baseLayer.id;
+    hasSelection = false;
+    undoStack = [];
+    redoStack = [];
+    emptyState.style.display='none';
+    canvasHolder.style.display='block';
+    sidePanel.style.display='block';
+    layerToggleBtn.style.display='flex';
+    updateHistoryButtons();
+    syncResizeInputs();
+    updateDims();
+    compositeLayers();
+    renderSelectionOverlay();
+    renderLayerPanel();
+    setTool('none');
+    downloadBtn.disabled=false;
+    closeBtn.disabled=false;
+  }
   fileInput.addEventListener('change', e=>{
     const file = e.target.files[0];
     if(!file) return;
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = ()=>{
-      let w = img.naturalWidth, h = img.naturalHeight;
-      const scale = Math.min(1, MAX_DIM / Math.max(w,h));
-      w = Math.round(w*scale); h = Math.round(h*scale);
-      setCanvasSize(w,h);
-      nextLayerId = 1;
-      const baseLayer = createLayer('배경', w, h);
-      baseLayer.ctx.drawImage(img,0,0,w,h);
-      layers = [baseLayer];
-      activeLayerId = baseLayer.id;
-      hasSelection = false;
-      undoStack = [];
-      redoStack = [];
-      emptyState.style.display='none';
-      canvasHolder.style.display='block';
-      sidePanel.style.display='block';
-      layerToggleBtn.style.display='flex';
-      updateHistoryButtons();
-      syncResizeInputs();
-      updateDims();
-      compositeLayers();
-      renderSelectionOverlay();
-      renderLayerPanel();
+      finishImageLoad(img);
       URL.revokeObjectURL(url);
-      setTool('none');
-      downloadBtn.disabled=false;
-      closeBtn.disabled=false;
     };
     img.src = url;
+  });
+
+  // ---------- URL import ----------
+  const emptyStateActions = document.getElementById('emptyStateActions');
+  const urlImportBtn = document.getElementById('urlImportBtn');
+  const urlImportForm = document.getElementById('urlImportForm');
+  const urlImportInput = document.getElementById('urlImportInput');
+  const urlImportConfirm = document.getElementById('urlImportConfirm');
+  const urlImportCancel = document.getElementById('urlImportCancel');
+  const urlImportError = document.getElementById('urlImportError');
+  function showUrlImportError(msg){
+    urlImportError.textContent = msg;
+    urlImportError.hidden = false;
+  }
+  function openUrlImportForm(){
+    emptyStateActions.hidden = true;
+    urlImportForm.hidden = false;
+    urlImportError.hidden = true;
+    urlImportInput.value = '';
+    urlImportInput.focus();
+  }
+  function closeUrlImportForm(){
+    urlImportForm.hidden = true;
+    emptyStateActions.hidden = false;
+    urlImportConfirm.disabled = false;
+    urlImportConfirm.textContent = '가져오기';
+  }
+  urlImportBtn.addEventListener('click', openUrlImportForm);
+  urlImportCancel.addEventListener('click', closeUrlImportForm);
+  function importImageFromUrl(){
+    const raw = urlImportInput.value.trim();
+    if(!raw){ showUrlImportError('이미지 URL을 입력해주세요.'); return; }
+    let parsed;
+    try{ parsed = new URL(raw); }catch(err){ showUrlImportError('올바른 URL 형식이 아니에요.'); return; }
+    if(parsed.protocol!=='http:' && parsed.protocol!=='https:'){
+      showUrlImportError('http/https URL만 지원해요.');
+      return;
+    }
+    urlImportError.hidden = true;
+    urlImportConfirm.disabled = true;
+    urlImportConfirm.textContent = '불러오는 중…';
+    const img = new Image();
+    // Needed so the loaded pixels aren't canvas-tainted — every feature here
+    // (undo, export, effects) reads pixel data back out via getImageData.
+    // If the remote server doesn't send CORS headers, the load itself fails
+    // below rather than silently producing a canvas nothing else can read.
+    img.crossOrigin = 'anonymous';
+    img.onload = ()=>{
+      finishImageLoad(img);
+      closeUrlImportForm();
+    };
+    img.onerror = ()=>{
+      urlImportConfirm.disabled = false;
+      urlImportConfirm.textContent = '가져오기';
+      showUrlImportError('이미지를 불러오지 못했어요. URL이 맞는지, 그리고 그 서버가 외부 사이트의 이미지 사용을 허용하는지(CORS) 확인해주세요.');
+    };
+    img.src = parsed.href;
+  }
+  urlImportConfirm.addEventListener('click', importImageFromUrl);
+  urlImportInput.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); importImageFromUrl(); }
   });
 
   // ---------- Undo ----------
