@@ -876,14 +876,16 @@
   }
   function createLayer(name, w, h){
     const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
-    return { id: nextLayerId++, name, canvas, ctx: lctx, visible:true, locked:false, opacity:1, blendMode:'normal' };
+    return { id: nextLayerId++, name, canvas, ctx: lctx, visible:true, locked:false, opacity:1, blendMode:'normal',
+      adjustmentType:null, adjustmentParams:null, adjustmentSourceLayerId:null };
   }
   // Creates a layer at (w,h) copying id/name/visible/locked/opacity/blendMode
   // from a snapshot entry, but leaves its canvas blank — for callers that are
   // about to draw scaled/rotated/cropped content into it themselves.
   function layerShellFromSnapshot(ls, w, h){
     const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
-    return { id: ls.id, name: ls.name, canvas, ctx: lctx, visible: ls.visible, locked: ls.locked, opacity: ls.opacity, blendMode: ls.blendMode||'normal' };
+    return { id: ls.id, name: ls.name, canvas, ctx: lctx, visible: ls.visible, locked: ls.locked, opacity: ls.opacity, blendMode: ls.blendMode||'normal',
+      adjustmentType: ls.adjustmentType||null, adjustmentParams: ls.adjustmentParams||null, adjustmentSourceLayerId: ls.adjustmentSourceLayerId||null };
   }
   function layerFromSnapshot(ls, w, h){
     const layer = layerShellFromSnapshot(ls, w, h);
@@ -924,7 +926,10 @@
   // surfaces WHY nothing is happening instead of leaving it unexplained.
   const lockedLayerWarning = document.getElementById('lockedLayerWarning');
   function updateLockedLayerWarning(){
-    const layer = activeLayer();
+    // During a 선택색상/레벨/곡선 session the layer actually being written to
+    // is previewTargetLayerId, not necessarily activeLayerId (a fresh
+    // adjustment leaves activeLayerId pointing at its untouched source).
+    const layer = previewTargetLayerId!=null ? layers.find(l=>l.id===previewTargetLayerId) : activeLayer();
     lockedLayerWarning.hidden = !(PEEK_MENUS.has(activeMenuId) && !!(layer && layer.locked));
   }
   function svgEye(open){
@@ -1034,6 +1039,10 @@
       row.addEventListener('click', e=>{
         if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
         selectLayer(layer.id);
+        if(layer.adjustmentType){
+          const menuId = ADJUSTMENT_MENU_ID[layer.adjustmentType];
+          if(menuId) openMenuFromLayerRow(menuId);
+        }
       });
       eyeBtn.addEventListener('click', e=>{
         e.stopPropagation();
@@ -1338,6 +1347,9 @@
       w: mainCanvas.width, h: mainCanvas.height,
       layers: layers.map(l => ({
         id:l.id, name:l.name, visible:l.visible, locked:l.locked, opacity:l.opacity, blendMode:l.blendMode,
+        adjustmentType: l.adjustmentType||null,
+        adjustmentParams: l.adjustmentParams ? JSON.parse(JSON.stringify(l.adjustmentParams)) : null,
+        adjustmentSourceLayerId: l.adjustmentSourceLayerId||null,
         img: l.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height)
       })),
       activeLayerId,
@@ -1597,7 +1609,10 @@
     mctx.save();
     if(subtract){ ensureMaskInitialized(); mctx.globalCompositeOperation='destination-out'; }
     else mctx.globalCompositeOperation='source-over';
-    const grad = mctx.createRadialGradient(x,y,Math.max(0,r*hardness),x,y,r);
+    // A radial gradient with equal inner/outer radius (hardness at its 100%
+    // max, so r*hardness===r) renders as fully transparent in Chromium —
+    // keep the inner radius at least half a px short of the outer one.
+    const grad = mctx.createRadialGradient(x,y,Math.max(0,Math.min(r*hardness,r-0.5)),x,y,r);
     grad.addColorStop(0,'rgba(255,255,255,1)');
     grad.addColorStop(1,'rgba(255,255,255,0)');
     mctx.fillStyle = grad;
@@ -1620,25 +1635,53 @@
     const n = w*h;
     const keep = new Uint8ClampedArray(n).fill(255);
     const visited = new Uint8Array(n);
-    const TOLERANCE = 28;
+    const TOLERANCE = 28; // neighbor-to-neighbor step tolerance (lets gradients through)
+    const REF_TOLERANCE = 90; // max drift from the estimated background color
     const stack = [];
     function colorDist(i,j){
       const ii=i*4, jj=j*4;
       const dr=src[ii]-src[jj], dg=src[ii+1]-src[jj+1], db=src[ii+2]-src[jj+2];
       return Math.sqrt(dr*dr+dg*dg+db*db);
     }
-    for(let x=0;x<w;x++){ stack.push(x); stack.push((h-1)*w+x); }
-    for(let y=0;y<h;y++){ stack.push(y*w); stack.push(y*w+w-1); }
+    // Estimate a robust reference background color from the border pixels
+    // using the most common coarsely-quantized color bucket (mode, not mean)
+    // so a subject that partially touches the border can't skew the estimate.
+    const buckets = new Map();
+    function addBorderSample(i){
+      const ii = i*4;
+      const key = (src[ii]>>4)*256 + (src[ii+1]>>4)*16 + (src[ii+2]>>4);
+      let b = buckets.get(key);
+      if(!b){ b = {count:0, r:0, g:0, b:0}; buckets.set(key,b); }
+      b.count++; b.r+=src[ii]; b.g+=src[ii+1]; b.b+=src[ii+2];
+    }
+    for(let x=0;x<w;x++){ addBorderSample(x); addBorderSample((h-1)*w+x); }
+    for(let y=0;y<h;y++){ addBorderSample(y*w); addBorderSample(y*w+w-1); }
+    let best = null;
+    for(const b of buckets.values()){ if(!best || b.count>best.count) best = b; }
+    const refR = best.r/best.count, refG = best.g/best.count, refB = best.b/best.count;
+    function refDist(i){
+      const ii=i*4;
+      const dr=src[ii]-refR, dg=src[ii+1]-refG, db=src[ii+2]-refB;
+      return Math.sqrt(dr*dr+dg*dg+db*db);
+    }
+    // Only seed the flood fill from border pixels that actually look like the
+    // background color — a subject touching the border must not be seeded.
+    function seed(i){ if(refDist(i) < REF_TOLERANCE) stack.push(i); }
+    for(let x=0;x<w;x++){ seed(x); seed((h-1)*w+x); }
+    for(let y=0;y<h;y++){ seed(y*w); seed(y*w+w-1); }
     while(stack.length){
       const i = stack.pop();
       if(visited[i]) continue;
       visited[i] = 1;
       keep[i] = 0;
       const x = i%w, y = (i-x)/w;
-      if(x>0 && !visited[i-1] && colorDist(i,i-1)<TOLERANCE) stack.push(i-1);
-      if(x<w-1 && !visited[i+1] && colorDist(i,i+1)<TOLERANCE) stack.push(i+1);
-      if(y>0 && !visited[i-w] && colorDist(i,i-w)<TOLERANCE) stack.push(i-w);
-      if(y<h-1 && !visited[i+w] && colorDist(i,i+w)<TOLERANCE) stack.push(i+w);
+      // Both checks matter: the local step catches a sharp edge immediately,
+      // while the global reference bound stops a long chain of small steps
+      // from drifting all the way into a differently-colored subject.
+      if(x>0 && !visited[i-1] && colorDist(i,i-1)<TOLERANCE && refDist(i-1)<REF_TOLERANCE) stack.push(i-1);
+      if(x<w-1 && !visited[i+1] && colorDist(i,i+1)<TOLERANCE && refDist(i+1)<REF_TOLERANCE) stack.push(i+1);
+      if(y>0 && !visited[i-w] && colorDist(i,i-w)<TOLERANCE && refDist(i-w)<REF_TOLERANCE) stack.push(i-w);
+      if(y<h-1 && !visited[i+w] && colorDist(i,i+w)<TOLERANCE && refDist(i+w)<REF_TOLERANCE) stack.push(i+w);
     }
     return keep;
   }
@@ -1702,7 +1745,7 @@
     const r = size/2;
     bgMaskCtx.save();
     bgMaskCtx.globalCompositeOperation = mode==='sub' ? 'destination-out' : 'source-over';
-    const grad = bgMaskCtx.createRadialGradient(x,y,Math.max(0,r*hardness),x,y,r);
+    const grad = bgMaskCtx.createRadialGradient(x,y,Math.max(0,Math.min(r*hardness,r-0.5)),x,y,r);
     grad.addColorStop(0,'rgba(255,255,255,1)');
     grad.addColorStop(1,'rgba(255,255,255,0)');
     bgMaskCtx.fillStyle = grad;
@@ -1797,7 +1840,7 @@
       lctx.fillStyle = `rgb(${rr},${gg},${bb})`;
       lctx.fillRect(x-r, y-r, size, size);
     } else {
-      const grad = lctx.createRadialGradient(x,y,Math.max(0,r*hardness),x,y,r);
+      const grad = lctx.createRadialGradient(x,y,Math.max(0,Math.min(r*hardness,r-0.5)),x,y,r);
       grad.addColorStop(0, `rgba(${rr},${gg},${bb},1)`);
       grad.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
       lctx.fillStyle = grad;
@@ -2104,6 +2147,98 @@
     layer.ctx.putImageData(out,0,0);
     compositeLayers();
   }
+  // ---------- Adjustment layers (선택색상/레벨/곡선) ----------
+  // Unlike 효과 (which bakes into the active layer in place), these three
+  // read from one layer (previewSourceLayerId) and write into another
+  // (previewTargetLayerId) — a brand-new layer for a fresh adjustment, or an
+  // existing adjustment layer being re-edited. Both null outside such a
+  // session. Reading the source's CURRENT pixels fresh every tick (rather
+  // than a frozen snapshot) means re-editing never compounds on itself.
+  let previewSourceLayerId = null;
+  let previewTargetLayerId = null;
+  function previewAdjustment(effectFn){
+    if(!editingSnapshot || previewTargetLayerId==null) return;
+    const target = layers.find(l=>l.id===previewTargetLayerId);
+    const source = layers.find(l=>l.id===previewSourceLayerId);
+    if(!target || !source || target.locked) return;
+    sessionDirty = true;
+    const w = mainCanvas.width, h = mainCanvas.height;
+    const base = source.ctx.getImageData(0,0,w,h).data;
+    const effect = effectFn(new Uint8ClampedArray(base), w, h);
+    const out = new ImageData(w,h);
+    const alphaAll = hasSelection ? mctx.getImageData(0,0,w,h).data : null;
+    for(let i=0;i<base.length;i+=4){
+      const a = alphaAll ? alphaAll[i+3]/255 : 1;
+      out.data[i]   = base[i]  *(1-a) + effect[i]  *a;
+      out.data[i+1] = base[i+1]*(1-a) + effect[i+1]*a;
+      out.data[i+2] = base[i+2]*(1-a) + effect[i+2]*a;
+      out.data[i+3] = base[i+3]*(1-a) + effect[i+3]*a;
+    }
+    target.ctx.putImageData(out,0,0);
+    compositeLayers();
+  }
+  function nextAdjustmentLayerName(baseName, type){
+    const count = layers.filter(l=>l.adjustmentType===type).length;
+    return count===0 ? baseName : (baseName+' '+(count+1));
+  }
+  // Called from onMenuOpen for group-sc/levels/curve. If the layer that was
+  // already active IS a matching adjustment layer (the user selected it from
+  // the panel to re-edit it), reuse it and return its stored params for the
+  // caller to load into the UI. Otherwise create a brand-new layer right now
+  // — sourced from, and inserted directly above, the active layer — hide
+  // that source layer (so the new one's full replacement result isn't
+  // double-composited over it), and leave activeLayerId untouched.
+  function beginAdjustmentSession(type, baseName){
+    const active = activeLayer();
+    if(!active) return null;
+    if(active.adjustmentType===type){
+      previewTargetLayerId = active.id;
+      previewSourceLayerId = active.adjustmentSourceLayerId;
+      return active.adjustmentParams;
+    }
+    const source = active;
+    const newLayer = createLayer(nextAdjustmentLayerName(baseName, type), mainCanvas.width, mainCanvas.height);
+    newLayer.ctx.drawImage(source.canvas, 0, 0);
+    newLayer.adjustmentType = type;
+    newLayer.adjustmentSourceLayerId = source.id;
+    const idx = layers.indexOf(source);
+    layers.splice(idx+1, 0, newLayer);
+    source.visible = false;
+    previewSourceLayerId = source.id;
+    previewTargetLayerId = newLayer.id;
+    compositeLayers();
+    renderLayerPanel();
+    return null;
+  }
+  function endAdjustmentSession(){
+    previewSourceLayerId = null;
+    previewTargetLayerId = null;
+  }
+  const ADJUSTMENT_MENU_ID = {sc:'group-sc', levels:'group-levels', curve:'group-curve'};
+  // Clicking an adjustment layer in the panel re-opens the menu that created
+  // it (already pre-filled with its stored params via beginAdjustmentSession)
+  // — mirrors whichever entry path the current layout actually uses (desktop
+  // accordion vs mobile tab bar) so the UI ends up in the same state either
+  // way would have left it.
+  function openMenuFromLayerRow(id){
+    const targetEl = document.getElementById(id);
+    if(!targetEl || id===activeMenuId) return;
+    if(activeMenuId) applyActiveMenu();
+    if(isDesktopLayout()){
+      document.querySelectorAll('#sideGroups > .group').forEach(g=> g.classList.add('collapsed'));
+      targetEl.classList.remove('collapsed');
+    } else {
+      if(mobileTabBar){
+        mobileTabBar.querySelectorAll('.tab-btn.active').forEach(b=>b.classList.remove('active'));
+        const btn = mobileTabBar.querySelector('.tab-btn[data-target="'+id+'"]');
+        if(btn) btn.classList.add('active');
+      }
+      sideGroups.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
+      targetEl.classList.add('mobile-active');
+      targetEl.classList.remove('collapsed');
+    }
+    enterMenu(id);
+  }
   // Press-and-hold on the image (효과/선택색상/레벨/곡선 only, once something's
   // actually changed) shows the image as it was before this menu's edits, so
   // the user can compare before/after; releasing restores the live preview.
@@ -2115,6 +2250,17 @@
   }
   function startPeek(){
     if(isPeeking || !canPeek()) return;
+    if(previewTargetLayerId!=null){
+      // Adjustment-layer session: "before" is simply the (hidden) source
+      // layer, so peek just swaps which of the pair is visible.
+      const target = layers.find(l=>l.id===previewTargetLayerId);
+      const source = layers.find(l=>l.id===previewSourceLayerId);
+      if(!target || !source) return;
+      isPeeking = true;
+      target.visible = false; source.visible = true;
+      compositeLayers();
+      return;
+    }
     const layer = layers.find(l=>l.id===editingSnapshot.activeLayerId);
     const layerSnap = editingSnapshot.layers.find(l=>l.id===editingSnapshot.activeLayerId);
     if(!layer || !layerSnap) return;
@@ -2126,6 +2272,14 @@
   function endPeek(){
     if(!isPeeking) return;
     isPeeking = false;
+    if(previewTargetLayerId!=null){
+      const target = layers.find(l=>l.id===previewTargetLayerId);
+      const source = layers.find(l=>l.id===previewSourceLayerId);
+      if(target) target.visible = true;
+      if(source) source.visible = false;
+      compositeLayers();
+      return;
+    }
     const layer = editingSnapshot && layers.find(l=>l.id===editingSnapshot.activeLayerId);
     if(layer && peekAfterImage) layer.ctx.putImageData(peekAfterImage,0,0);
     peekAfterImage = null;
@@ -2872,7 +3026,7 @@
   }
   function runSCPreview(){
     beginEdit();
-    previewEffect((data)=>{
+    previewAdjustment((data)=>{
       for(let i=0;i<data.length;i+=4){
         const r=data[i], g=data[i+1], b=data[i+2];
         const [c,m,y,k] = scAggregate(r,g,b);
@@ -2886,6 +3040,10 @@
       }
       return data;
     });
+    if(previewTargetLayerId!=null){
+      const t = layers.find(l=>l.id===previewTargetLayerId);
+      if(t) t.adjustmentParams = {scValues: JSON.parse(JSON.stringify(scValues))};
+    }
   }
   function syncSCInputs(){
     const v = scValues[scCurrentRange];
@@ -2940,12 +3098,16 @@
       x = Math.pow(x, 1/gamma);
       lut[v] = outB + x*(outW-outB);
     }
-    previewEffect((data)=>{
+    previewAdjustment((data)=>{
       for(let i=0;i<data.length;i+=4){
         data[i]=lut[data[i]]; data[i+1]=lut[data[i+1]]; data[i+2]=lut[data[i+2]];
       }
       return data;
     });
+    if(previewTargetLayerId!=null){
+      const t = layers.find(l=>l.id===previewTargetLayerId);
+      if(t) t.adjustmentParams = {inB:parseInt(lvInB.value,10), inW:parseInt(lvInW.value,10), gamma:parseInt(lvGamma.value,10), outB:parseInt(lvOutB.value,10), outW:parseInt(lvOutW.value,10)};
+    }
   }
   [lvInB,lvInW,lvGamma,lvOutB,lvOutW].forEach(el=>{
     el.addEventListener('input', ()=>{
@@ -2957,13 +3119,14 @@
       runLevelsPreview();
     });
   });
-  function resetLevelsInputs(){
-    lvInB.value=0;lvInW.value=255;lvGamma.value=100;lvOutB.value=0;lvOutW.value=255;
-    document.getElementById('lvInBVal').textContent='0';
-    document.getElementById('lvInWVal').textContent='255';
-    document.getElementById('lvGammaVal').textContent='1.00';
-    document.getElementById('lvOutBVal').textContent='0';
-    document.getElementById('lvOutWVal').textContent='255';
+  function resetLevelsInputs(params){
+    const p = params || {inB:0, inW:255, gamma:100, outB:0, outW:255};
+    lvInB.value=p.inB; lvInW.value=p.inW; lvGamma.value=p.gamma; lvOutB.value=p.outB; lvOutW.value=p.outW;
+    document.getElementById('lvInBVal').textContent=p.inB;
+    document.getElementById('lvInWVal').textContent=p.inW;
+    document.getElementById('lvGammaVal').textContent=(p.gamma/100).toFixed(2);
+    document.getElementById('lvOutBVal').textContent=p.outB;
+    document.getElementById('lvOutWVal').textContent=p.outW;
   }
   function applyLevelsAction(){ commitEdit(); resetLevelsInputs(); }
   function cancelLevelsAction(){ cancelEdit(); resetLevelsInputs(); }
@@ -3093,12 +3256,16 @@
     beginEdit();
     sessionDirty = true;
     const lut = drawCurveEditor();
-    previewEffect((data)=>{
+    previewAdjustment((data)=>{
       for(let i=0;i<data.length;i+=4){
         data[i]=lut[data[i]]; data[i+1]=lut[data[i+1]]; data[i+2]=lut[data[i+2]];
       }
       return data;
     });
+    if(previewTargetLayerId!=null){
+      const t = layers.find(l=>l.id===previewTargetLayerId);
+      if(t) t.adjustmentParams = {points: JSON.parse(JSON.stringify(curvePoints))};
+    }
   }
   curveCanvas.addEventListener('pointerdown', e=>{
     const [x,y] = curvePointerPos(e);
@@ -3185,7 +3352,20 @@
       showCropFrame();
     } else {
       if(id==='group-resize') syncResizeInputs();
-      if(id==='group-sc') syncSCInputs();
+      if(id==='group-sc'){
+        const params = beginAdjustmentSession('sc', '선택색상');
+        if(params){ scValues = JSON.parse(JSON.stringify(params.scValues)); scCurrentRange='red'; scRangeSelect.value='red'; }
+        syncSCInputs();
+      }
+      if(id==='group-levels'){
+        const params = beginAdjustmentSession('levels', '레벨');
+        resetLevelsInputs(params);
+      }
+      if(id==='group-curve'){
+        const params = beginAdjustmentSession('curve', '곡선');
+        curvePoints = params ? JSON.parse(JSON.stringify(params.points)) : [[0,0],[255,255]];
+        drawCurveEditor();
+      }
       if(id==='group-draw'){
         strokeUndoStack = []; strokeRedoStack = [];
         updateDrawHistoryButtons();
@@ -3201,6 +3381,7 @@
   }
   function onMenuClose(id){
     if(id==='group-crop') hideCropFrame();
+    if(id==='group-sc' || id==='group-levels' || id==='group-curve') endAdjustmentSession();
   }
 
   // Every menu commits/discards as one bundled undo step via the header's
