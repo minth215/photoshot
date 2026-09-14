@@ -2445,12 +2445,16 @@
       result[i+2] = result[i+2]*(1-t) + gray*t;
     }
   }
+  // Only the currently-picked tile's own slider is ever live — otherwise a
+  // leftover value on another effect's slider (e.g. blur/noise's non-zero
+  // defaults) would silently stack onto whichever effect is actually open.
+  let currentEffectName = null;
   function runEffectsPreview(){
     beginEdit();
-    const radius = parseInt(blurRange.value,10);
-    const noiseAmt = parseInt(noiseRange.value,10);
+    const radius = currentEffectName==='blur' ? parseInt(blurRange.value,10) : 0;
+    const noiseAmt = currentEffectName==='noise' ? parseInt(noiseRange.value,10) : 0;
     const noiseMono = noiseMonoChk.checked;
-    const bwAmt = parseInt(bwRange.value,10);
+    const bwAmt = currentEffectName==='bw' ? parseInt(bwRange.value,10) : 0;
     previewEffect((data,w,h)=>{
       let result = radius>0 ? unpremultiplyAlpha(gaussianApprox(premultiplyAlpha(data),w,h,radius)) : data;
       if(noiseAmt>0){ result = new Uint8ClampedArray(result); addNoise(result, noiseAmt, noiseMono); }
@@ -2467,6 +2471,7 @@
     document.getElementById('blurVal').textContent='3';
     document.getElementById('noiseVal').textContent='12';
     document.getElementById('bwVal').textContent='0';
+    currentEffectName = null;
   }
   function applyEffectsAction(){ commitEdit(); resetEffectsInputs(); }
   function cancelEffectsAction(){ cancelEdit(); resetEffectsInputs(); }
@@ -2476,6 +2481,11 @@
   function showEffectGrid(){
     effectGridEl.hidden = false;
     document.querySelectorAll('.effect-detail').forEach(el=> el.hidden=true);
+    // Back at the picker, no single effect is "selected" — revert the live
+    // preview to the untouched image rather than leaving the last-picked
+    // effect's preview showing.
+    currentEffectName = null;
+    if(editingSnapshot) runEffectsPreview();
   }
   function showEffectDetail(name){
     effectGridEl.hidden = true;
@@ -2483,9 +2493,11 @@
     const map = {blur:'effectDetailBlur', noise:'effectDetailNoise', bw:'effectDetailBw'};
     const el = document.getElementById(map[name]);
     if(el) el.hidden = false;
-    // The blur/noise sliders now start at a non-zero default, so the preview
-    // must render immediately on entry instead of waiting for the first drag.
-    if(name==='blur' || name==='noise') runEffectsPreview();
+    // Sliders can already sit at a non-zero value (blur/noise's defaults, or
+    // whatever was left from switching tiles), so the preview must render
+    // immediately on entry instead of waiting for the first drag.
+    currentEffectName = name;
+    runEffectsPreview();
   }
   document.querySelectorAll('.effect-tile').forEach(tile=>{
     tile.addEventListener('click', ()=> showEffectDetail(tile.dataset.effect));
