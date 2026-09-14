@@ -307,10 +307,10 @@
 
     aside#sidePanel{
       width:100%;flex:0 1 auto;
-      display:flex;flex-direction:column;
       border-left:none;border-top:1px solid var(--line);
       padding:0;overflow:visible;background:var(--panel);
     }
+    #sideGroups{display:flex;flex-direction:column;}
     .mobile-tabbar{
       order:2;flex:0 0 auto;
       display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;
@@ -324,8 +324,8 @@
     /* Panels take up real space (pushing/shrinking the image area above) instead
        of floating over the image, so opening a taller panel visibly shrinks the
        image to fit whatever room is left. */
-    aside#sidePanel > .group{display:none;}
-    aside#sidePanel > .group.mobile-active{
+    #sideGroups > .group{display:none;}
+    #sideGroups > .group.mobile-active{
       order:1;
       display:block;
       max-height:60vh;overflow-y:auto;
@@ -335,6 +335,26 @@
     aside#sidePanel .group-body{display:flex!important;flex-direction:column;gap:10px;}
     aside#sidePanel .group > summary{pointer-events:none;}
     aside#sidePanel .group > summary:after{content:'';}
+  }
+
+  /* ---------- Desktop (Photoshop-style): layers panel docked at the bottom
+     of the right sidebar instead of floating over the image, always visible. ---------- */
+  @media (min-width: 861px){
+    .layer-tab-btn{display:none!important;}
+    /* The adjustment groups get their own scrolling region (flex:1) so the
+       docked layer panel can be a plain fixed-size flex item pinned at the
+       bottom — never overlapping the groups above it, unlike a sticky
+       element sharing one scroll container with them. */
+    aside#sidePanel{display:flex;flex-direction:column;overflow-y:hidden;padding:0;}
+    #sideGroups{flex:1 1 auto;overflow-y:auto;min-height:0;padding:14px;}
+    .layer-panel.docked{
+      position:static;flex:0 0 auto;
+      margin:0;
+      width:auto;max-width:none;max-height:280px;
+      border-left:none;border-right:none;border-bottom:none;border-radius:0;
+      border-top:1px solid var(--line);
+    }
+    .layer-panel.docked.collapsed{display:flex;}
   }
 </style>
 </head>
@@ -430,6 +450,7 @@
   </div>
 
   <aside id="sidePanel" style="display:none;">
+   <div id="sideGroups">
 
     <nav class="mobile-tabbar" id="mobileTabBar">
       <button class="tab-btn" type="button" data-target="group-crop">
@@ -721,6 +742,7 @@
       </div>
     </details>
 
+   </div>
   </aside>
 </div>
 
@@ -736,6 +758,7 @@
   const emptyState = document.getElementById('emptyState');
   const canvasHolder = document.getElementById('canvasHolder');
   const sidePanel = document.getElementById('sidePanel');
+  const sideGroups = document.getElementById('sideGroups');
   const mainCanvas = document.getElementById('mainCanvas');
   const overlayCanvas = document.getElementById('overlayCanvas');
   const ctx = mainCanvas.getContext('2d', {willReadFrequently:true});
@@ -752,6 +775,28 @@
   const layerToggleBtn = document.getElementById('layerToggleBtn');
   const layerPanel = document.getElementById('layerPanel');
   const layerList = document.getElementById('layerList');
+
+  // ---------- Desktop layout: layer panel docked in the sidebar ----------
+  // Same breakpoint as the mobile stylesheet (max-width:860px) so the two
+  // never disagree about which layout is active.
+  const desktopMedia = window.matchMedia('(min-width: 861px)');
+  function isDesktopLayout(){ return desktopMedia.matches; }
+  // On desktop the layer panel lives permanently at the bottom of the right
+  // sidebar (Photoshop-style) instead of behind the floating bookmark toggle;
+  // on mobile it stays exactly where it always was. The same DOM node moves
+  // between the two spots rather than duplicating the panel/list markup.
+  function syncLayerPanelDock(){
+    if(isDesktopLayout()){
+      if(layerPanel.parentElement!==sidePanel) sidePanel.appendChild(layerPanel);
+      layerPanel.classList.add('docked');
+      layerPanel.classList.remove('collapsed');
+    } else {
+      if(layerPanel.parentElement!==stageWrap) layerToggleBtn.insertAdjacentElement('afterend', layerPanel);
+      layerPanel.classList.remove('docked');
+    }
+  }
+  syncLayerPanelDock();
+  desktopMedia.addEventListener('change', syncLayerPanelDock);
 
   function updateHistoryButtons(){
     undoBtn.disabled = undoStack.length===0;
@@ -1096,6 +1141,42 @@
     applyCanvasDisplaySize();
   }
 
+  // ---------- Mouse wheel zoom (PC): zooms toward the cursor, in both the
+  // normal view and while the 크롭 frame is active. ----------
+  function zoomAt(clientX, clientY, factor){
+    if(!mainCanvas.width || !mainCanvas.height) return;
+    if(cropModeActive){
+      const rectOld = mainCanvas.getBoundingClientRect();
+      const oldScale = imgScale;
+      const imgX = (clientX-rectOld.left)/oldScale, imgY = (clientY-rectOld.top)/oldScale;
+      imgScale = clampImgScale(oldScale*factor);
+      renderCropFrame();
+      const rectNew = mainCanvas.getBoundingClientRect();
+      imgOffsetX += clientX - (rectNew.left + imgX*imgScale);
+      imgOffsetY += clientY - (rectNew.top + imgY*imgScale);
+      clampImgOffset();
+      renderCropFrame();
+    } else {
+      const rectOld = mainCanvas.getBoundingClientRect();
+      const oldScale = viewScale;
+      const imgX = (clientX-rectOld.left)/oldScale, imgY = (clientY-rectOld.top)/oldScale;
+      viewScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldScale*factor));
+      userZoomed = true;
+      applyCanvasDisplaySize();
+      const rectNew = mainCanvas.getBoundingClientRect();
+      panOffsetX += clientX - (rectNew.left + imgX*viewScale);
+      panOffsetY += clientY - (rectNew.top + imgY*viewScale);
+      clampPanOffset();
+      applyCanvasDisplaySize();
+    }
+  }
+  stageWrap.addEventListener('wheel', e=>{
+    if(!mainCanvas.width || !mainCanvas.height) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY*0.0015);
+    zoomAt(e.clientX, e.clientY, factor);
+  }, { passive:false });
+
   // Re-fit whenever the visible image area's actual box size changes — a window
   // resize, but also opening/closing/switching a mobile control panel, since those
   // now push the image area rather than floating over it (so its available height
@@ -1329,13 +1410,13 @@
     drawCurveEditor();
     if(mobileTabBar){
       mobileTabBar.querySelectorAll('.tab-btn.active').forEach(b=>b.classList.remove('active'));
-      sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
+      sideGroups.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
     }
     activeMenuId = null;
     document.body.classList.remove('editing-mode');
     document.body.classList.remove('crop-editing');
     document.body.classList.remove('draw-editing');
-    document.querySelectorAll('aside#sidePanel > .group').forEach(g=> g.classList.add('collapsed'));
+    document.querySelectorAll('#sideGroups > .group').forEach(g=> g.classList.add('collapsed'));
   }
   closeBtn.addEventListener('click', ()=>{
     if(window.confirm('진행 상황은 저장되지 않습니다. 새 작업을 시작할까요?')){
@@ -2127,7 +2208,19 @@
     mainCanvas.style.transform = '';
     overlayCanvas.style.transform = '';
     overlayCanvas.style.display = 'none';
-    resetCropView();
+    if(isDesktopLayout() && mainCanvas.width && mainCanvas.height){
+      // Desktop: start the crop frame at whatever scale the user was already
+      // viewing (covering the whole image) instead of a freshly computed fit —
+      // opening 크롭 must never look like a sudden zoom. Only an actual
+      // adjustment (ratio button, handle drag, manual zoom) changes it from here.
+      const carryScale = Math.min(viewScale, computeFitScale());
+      frameW = mainCanvas.width * carryScale;
+      frameH = mainCanvas.height * carryScale;
+      imgScale = carryScale;
+      imgOffsetX = 0; imgOffsetY = 0;
+    } else {
+      resetCropView();
+    }
     cropAutoZoom = true;
     cropAutoZoomToggle.checked = true;
     cropFrame.hidden = false;
@@ -3071,7 +3164,7 @@
     if(mobileTabBar){
       mobileTabBar.querySelectorAll('.tab-btn.active').forEach(b=>b.classList.remove('active'));
     }
-    sidePanel.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
+    sideGroups.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
     if(activeMenuId){
       const group = document.getElementById(activeMenuId);
       if(group) group.classList.add('collapsed');
@@ -3110,7 +3203,7 @@
   // is instead driven entirely by our own `.collapsed` class. Only one section is
   // ever the "active" editing session at a time — expanding a different one while
   // one is already open silently keeps (applies) whatever was pending in it first.
-  document.querySelectorAll('aside#sidePanel > .group > summary').forEach(summary=>{
+  document.querySelectorAll('#sideGroups > .group > summary').forEach(summary=>{
     summary.addEventListener('click', e=>{
       e.preventDefault();
       const group = summary.parentElement;
@@ -3119,7 +3212,7 @@
         return;
       }
       if(activeMenuId) applyActiveMenu();
-      document.querySelectorAll('aside#sidePanel > .group').forEach(g=> g.classList.add('collapsed'));
+      document.querySelectorAll('#sideGroups > .group').forEach(g=> g.classList.add('collapsed'));
       group.classList.remove('collapsed');
       enterMenu(group.id);
     });
