@@ -267,6 +267,10 @@
   .btnrow{display:flex;gap:6px;}
   .btnrow button{flex:1;}
   .hint{font-size:11px;color:var(--text-dim);line-height:1.5;margin:0;}
+  .locked-layer-warning{
+    color:var(--danger);background:rgba(226,114,91,.12);border:1px solid var(--danger);
+    border-radius:6px;padding:8px 10px;margin:0 12px 4px 12px;
+  }
   .two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .slider-with-input{display:flex;align-items:center;gap:8px;}
   .slider-with-input input[type=range]{flex:1;}
@@ -493,6 +497,8 @@
       </button>
     </nav>
 
+    <p class="hint locked-layer-warning" id="lockedLayerWarning" hidden>🔒 활성 레이어가 잠겨 있어 편집이 적용되지 않아요. 레이어 패널에서 잠금을 해제해주세요.</p>
+
     <details class="group collapsed" id="group-crop" open>
       <summary>크롭</summary>
       <div class="group-body">
@@ -667,7 +673,7 @@
       <summary>그리기</summary>
       <div class="group-body">
         <label class="field"><span class="row"><span>색상</span></span>
-          <input type="color" id="drawColor" value="#4fd1c5">
+          <input type="color" id="drawColor" value="#ff0000">
         </label>
         <div class="ratio-row">
           <button class="ratio-btn active" type="button" data-brushtype="round">원형</button>
@@ -911,6 +917,15 @@
     if(id===activeLayerId) return;
     activeLayerId = id;
     renderLayerPanel();
+    updateLockedLayerWarning();
+  }
+  // 효과/선택색상/레벨/곡선 all silently no-op when the active layer is locked
+  // (see previewEffect's `if(!layer || layer.locked) return;` guard) — this
+  // surfaces WHY nothing is happening instead of leaving it unexplained.
+  const lockedLayerWarning = document.getElementById('lockedLayerWarning');
+  function updateLockedLayerWarning(){
+    const layer = activeLayer();
+    lockedLayerWarning.hidden = !(PEEK_MENUS.has(activeMenuId) && !!(layer && layer.locked));
   }
   function svgEye(open){
     return open
@@ -1032,6 +1047,7 @@
         pushUndo(snapshotState());
         layer.locked = !layer.locked;
         renderLayerPanel();
+        updateLockedLayerWarning();
       });
       blendSelect.addEventListener('click', e=> e.stopPropagation());
       blendSelect.addEventListener('change', ()=>{
@@ -3210,6 +3226,7 @@
     document.body.classList.add('editing-mode');
     document.body.classList.toggle('crop-editing', id==='group-crop');
     document.body.classList.toggle('draw-editing', id==='group-draw');
+    updateLockedLayerWarning();
   }
   // Visually closes whichever menu is active (deactivates its mobile tab /
   // collapses its desktop section) and returns the header/tab bar to normal.
@@ -3226,6 +3243,7 @@
     document.body.classList.remove('crop-editing');
     document.body.classList.remove('draw-editing');
     activeMenuId = null;
+    updateLockedLayerWarning();
   }
   function applyActiveMenu(){
     if(!activeMenuId) return;
