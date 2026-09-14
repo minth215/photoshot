@@ -378,6 +378,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
         <span>그리기</span>
       </button>
+      <button class="tab-btn" type="button" data-target="group-bgremove">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
+        <span>배경 제거</span>
+      </button>
       <button class="tab-btn" type="button" data-target="group-selection">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
         <span>선택영역</span>
@@ -430,6 +434,28 @@
           <span class="row"><span>노출</span><span id="drawExposureVal">100</span></span>
           <input type="range" id="drawExposure" min="1" max="100" value="100">
         </label>
+      </div>
+    </details>
+
+    <details class="group collapsed" id="group-bgremove" open>
+      <summary>배경 제거</summary>
+      <div class="group-body">
+        <div class="toolrow">
+          <button class="toolbtn" type="button" data-bgtool="add" title="이 부분은 남깁니다 (복원)">+</button>
+          <button class="toolbtn" type="button" data-bgtool="sub" title="이 부분은 제거합니다">−</button>
+        </div>
+        <label class="field">
+          <span class="row"><span>브러쉬 크기</span><span id="bgBrushSizeVal">50</span></span>
+          <input type="range" id="bgBrushSize" min="4" max="250" value="50">
+        </label>
+        <label class="field">
+          <span class="row"><span>브러쉬 경도</span><span id="bgBrushHardnessVal">70</span></span>
+          <input type="range" id="bgBrushHardness" min="0" max="100" value="70">
+        </label>
+        <div class="btnrow">
+          <button id="bgAutoBtn" type="button">자동 감지 다시 적용</button>
+          <button id="bgResetBtn" class="ghost" type="button">전체 복원</button>
+        </div>
       </div>
     </details>
 
@@ -631,6 +657,11 @@
   const maskCanvas = document.createElement('canvas');
   const mctx = maskCanvas.getContext('2d', {willReadFrequently:true});
   let hasSelection = false;
+
+  // 배경 제거's own "keep" mask (255=keep, 0=removed) — separate from the
+  // shared selection mask above, scoped to a single 배경 제거 session.
+  const bgMaskCanvas = document.createElement('canvas');
+  const bgMaskCtx = bgMaskCanvas.getContext('2d', {willReadFrequently:true});
 
   let currentTool = 'none';
   let undoStack = [];
@@ -1129,9 +1160,17 @@
   toolButtons.forEach(b=>{
     b.addEventListener('click', ()=> setTool(b.dataset.tool));
   });
+  const bgToolButtons = document.querySelectorAll('[data-bgtool]');
+  bgToolButtons.forEach(b=>{
+    b.addEventListener('click', ()=> setTool(b.dataset.bgtool==='add' ? 'bg-add' : 'bg-sub'));
+  });
   function setTool(t){
     currentTool = t;
     toolButtons.forEach(b=> b.classList.toggle('active', b.dataset.tool===t));
+    bgToolButtons.forEach(b=>{
+      const bt = b.dataset.bgtool==='add' ? 'bg-add' : 'bg-sub';
+      b.classList.toggle('active', bt===t);
+    });
     document.getElementById('brushSizeWrap').style.display = (t==='brush-add'||t==='brush-sub') ? 'flex':'none';
     document.getElementById('brushHardnessWrap').style.display = (t==='brush-add'||t==='brush-sub') ? 'flex':'none';
     overlayCanvas.style.cursor = t==='none' ? 'default' : 'crosshair';
@@ -1220,6 +1259,7 @@
   let lassoPoints = [];
   let dragStart = null;
   let brushDrawing = false;
+  let bgPaintingActive = false;
 
   function canvasPos(e){
     const rect = overlayCanvas.getBoundingClientRect();
@@ -1244,6 +1284,123 @@
     mctx.restore();
     if(!subtract) hasSelection = true;
   }
+
+  // ---------- Background removal ----------
+  // Runs entirely client-side with no ML model: a flood fill seeded from
+  // every border pixel treats anything color-connected to the edge (within a
+  // tolerance) as background. This works well for the common case of a fairly
+  // uniform backdrop, and the +/− brushes below cover whatever it gets wrong.
+  const bgBrushSizeInput = document.getElementById('bgBrushSize');
+  const bgBrushHardnessInput = document.getElementById('bgBrushHardness');
+  bgBrushSizeInput.addEventListener('input', ()=>{ document.getElementById('bgBrushSizeVal').textContent = bgBrushSizeInput.value; });
+  bgBrushHardnessInput.addEventListener('input', ()=>{ document.getElementById('bgBrushHardnessVal').textContent = bgBrushHardnessInput.value; });
+
+  function detectBackgroundKeepMask(src, w, h){
+    const n = w*h;
+    const keep = new Uint8ClampedArray(n).fill(255);
+    const visited = new Uint8Array(n);
+    const TOLERANCE = 28;
+    const stack = [];
+    function colorDist(i,j){
+      const ii=i*4, jj=j*4;
+      const dr=src[ii]-src[jj], dg=src[ii+1]-src[jj+1], db=src[ii+2]-src[jj+2];
+      return Math.sqrt(dr*dr+dg*dg+db*db);
+    }
+    for(let x=0;x<w;x++){ stack.push(x); stack.push((h-1)*w+x); }
+    for(let y=0;y<h;y++){ stack.push(y*w); stack.push(y*w+w-1); }
+    while(stack.length){
+      const i = stack.pop();
+      if(visited[i]) continue;
+      visited[i] = 1;
+      keep[i] = 0;
+      const x = i%w, y = (i-x)/w;
+      if(x>0 && !visited[i-1] && colorDist(i,i-1)<TOLERANCE) stack.push(i-1);
+      if(x<w-1 && !visited[i+1] && colorDist(i,i+1)<TOLERANCE) stack.push(i+1);
+      if(y>0 && !visited[i-w] && colorDist(i,i-w)<TOLERANCE) stack.push(i-w);
+      if(y<h-1 && !visited[i+w] && colorDist(i,i+w)<TOLERANCE) stack.push(i+w);
+    }
+    return keep;
+  }
+  function bgTargetLayer(){
+    if(!editingSnapshot) return null;
+    return layers.find(l=>l.id===editingSnapshot.activeLayerId) || null;
+  }
+  // Re-derives the active layer's pixels as (original × current keep-mask) —
+  // called after every auto-detect run or +/− brush stroke.
+  function applyBgMaskToLayer(){
+    const layer = bgTargetLayer();
+    if(!layer || layer.locked) return;
+    const layerSnap = editingSnapshot.layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layerSnap) return;
+    const w = editingSnapshot.w, h = editingSnapshot.h;
+    const base = layerSnap.img.data;
+    const maskData = bgMaskCtx.getImageData(0,0,w,h).data;
+    const out = new ImageData(w,h);
+    for(let i=0;i<base.length;i+=4){
+      out.data[i]=base[i]; out.data[i+1]=base[i+1]; out.data[i+2]=base[i+2];
+      out.data[i+3] = Math.round(base[i+3] * (maskData[i+3]/255));
+    }
+    layer.ctx.putImageData(out,0,0);
+    compositeLayers();
+  }
+  function runAutoBgDetect(){
+    if(!editingSnapshot) return;
+    const layerSnap = editingSnapshot.layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layerSnap) return;
+    sessionDirty = true;
+    const w = editingSnapshot.w, h = editingSnapshot.h;
+    const keep = detectBackgroundKeepMask(layerSnap.img.data, w, h);
+    // A light feather on the mask's own alpha softens the cutout edge instead
+    // of leaving a hard, aliased silhouette.
+    // Kept deliberately small: without color decontamination, feathering a
+    // hard-edged cutout just reveals a thin ring of the original background
+    // color at partial opacity — a mild 1px softening avoids obvious jaggies
+    // without making that fringe more visible.
+    const feathered = keep.length ? gaussianApprox(expandToRGBA(keep), w, h, 1) : keep;
+    bgMaskCanvas.width = w; bgMaskCanvas.height = h;
+    const maskImg = new ImageData(w,h);
+    for(let i=0;i<w*h;i++){
+      maskImg.data[i*4]=255; maskImg.data[i*4+1]=255; maskImg.data[i*4+2]=255;
+      maskImg.data[i*4+3] = feathered[i*4+3];
+    }
+    bgMaskCtx.putImageData(maskImg,0,0);
+    applyBgMaskToLayer();
+  }
+  function expandToRGBA(alphaOnly){
+    const out = new Uint8ClampedArray(alphaOnly.length*4);
+    for(let i=0;i<alphaOnly.length;i++) out[i*4+3]=alphaOnly[i];
+    return out;
+  }
+  function paintBgMask(x,y,mode){
+    if(!editingSnapshot) return;
+    const layer = bgTargetLayer();
+    if(!layer || layer.locked) return;
+    sessionDirty = true;
+    const size = parseInt(bgBrushSizeInput.value,10);
+    const hardness = parseInt(bgBrushHardnessInput.value,10)/100;
+    const r = size/2;
+    bgMaskCtx.save();
+    bgMaskCtx.globalCompositeOperation = mode==='sub' ? 'destination-out' : 'source-over';
+    const grad = bgMaskCtx.createRadialGradient(x,y,Math.max(0,r*hardness),x,y,r);
+    grad.addColorStop(0,'rgba(255,255,255,1)');
+    grad.addColorStop(1,'rgba(255,255,255,0)');
+    bgMaskCtx.fillStyle = grad;
+    bgMaskCtx.beginPath(); bgMaskCtx.arc(x,y,r,0,Math.PI*2); bgMaskCtx.fill();
+    bgMaskCtx.restore();
+    applyBgMaskToLayer();
+  }
+  document.getElementById('bgAutoBtn').addEventListener('click', ()=> runAutoBgDetect());
+  document.getElementById('bgResetBtn').addEventListener('click', ()=>{
+    if(!editingSnapshot) return;
+    sessionDirty = true;
+    const w=editingSnapshot.w, h=editingSnapshot.h;
+    bgMaskCanvas.width=w; bgMaskCanvas.height=h;
+    bgMaskCtx.fillStyle='white';
+    bgMaskCtx.fillRect(0,0,w,h);
+    applyBgMaskToLayer();
+  });
+  function applyBgRemoveAction(){ commitEdit(); }
+  function cancelBgRemoveAction(){ cancelEdit(); }
 
   // ---------- Draw tool (그리기): paints onto a brand-new top layer ----------
   const drawColorInput = document.getElementById('drawColor');
@@ -1404,6 +1561,7 @@
     brushDrawing = false;
     drawingActive = false;
     lastDrawPos = null;
+    bgPaintingActive = false;
     dragStart = null;
     renderSelectionOverlay();
   }
@@ -1461,6 +1619,10 @@
       strokeUndoStack.push(preStroke);
       strokeRedoStack = [];
       updateDrawHistoryButtons();
+    } else if(currentTool==='bg-add' || currentTool==='bg-sub'){
+      beginEdit();
+      bgPaintingActive = true;
+      paintBgMask(x,y, currentTool==='bg-sub' ? 'sub' : 'add');
     }
   });
   overlayCanvas.addEventListener('pointermove', e=>{
@@ -1478,6 +1640,8 @@
     } else if(drawingActive && currentTool==='draw' && lastDrawPos){
       paintDrawLine(lastDrawPos[0], lastDrawPos[1], x, y);
       lastDrawPos = [x,y];
+    } else if(bgPaintingActive && (currentTool==='bg-add'||currentTool==='bg-sub')){
+      paintBgMask(x,y, currentTool==='bg-sub' ? 'sub' : 'add');
     }
   });
   function releasePointer(e){
@@ -1515,12 +1679,16 @@
       drawingActive=false;
       lastDrawPos=null;
     }
+    if(currentTool==='bg-add'||currentTool==='bg-sub'){
+      bgPaintingActive=false;
+    }
     dragStart=null;
   });
   overlayCanvas.addEventListener('pointercancel', e=>{
     endPeek();
     drawingActive=false;
     lastDrawPos=null;
+    bgPaintingActive=false;
     releasePointer(e);
   });
 
@@ -2446,6 +2614,7 @@
   // 크롭 is handled separately since it shows/hides the crop-frame overlay, not a tool.
   const MENU_TOOL = {
     'group-draw': 'draw',
+    'group-bgremove': 'bg-sub',
     'group-selection': 'lasso',
     'group-resize': 'none',
     'group-effects': 'none',
@@ -2467,6 +2636,7 @@
       }
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
+      if(id==='group-bgremove') runAutoBgDetect();
     }
   }
   function onMenuClose(id){
@@ -2477,6 +2647,7 @@
   // 적용/취소, instead of each panel having its own apply/cancel buttons.
   const MENU_SESSION = {
     'group-draw': { commit: applyDrawAction, cancel: cancelDrawAction },
+    'group-bgremove': { commit: applyBgRemoveAction, cancel: cancelBgRemoveAction },
     'group-selection': { commit: commitEdit, cancel: cancelEdit },
     'group-crop': { commit: applyCropAction, cancel: cancelCropAction },
     'group-resize': { commit: applyResizeAction, cancel: cancelResizeAction },
