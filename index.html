@@ -197,6 +197,13 @@
     padding:14px;
   }
   .toolrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  .effect-grid:not([hidden]){display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .effect-tile{display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:none;padding:0;}
+  .effect-thumb{width:100%;aspect-ratio:1;border-radius:16px;border:1px solid var(--line);background:#000;display:block;}
+  .effect-tile:hover .effect-thumb{border-color:var(--accent);}
+  .effect-tile span{font-size:12px;color:var(--text);}
+  .effect-detail:not([hidden]){display:flex;flex-direction:column;gap:10px;}
+  .effect-back{align-self:flex-start;}
   .ratio-row{display:flex;gap:6px;flex-wrap:wrap;}
   .ratio-btn{flex:1 1 auto;padding:6px 8px;font-size:12px;}
   .ratio-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
@@ -526,16 +533,50 @@
     </details>
 
     <details class="group collapsed" id="group-effects" open>
-      <summary>효과 (블러 / 노이즈)</summary>
+      <summary>효과</summary>
       <div class="group-body">
-        <label class="field">
-          <span class="row"><span>가우시안 블러</span><span id="blurVal">0</span></span>
-          <input type="range" id="blurRange" min="0" max="30" value="0">
-        </label>
-        <label class="field">
-          <span class="row"><span>노이즈 추가</span><span id="noiseVal">0</span></span>
-          <input type="range" id="noiseRange" min="0" max="100" value="0">
-        </label>
+        <div class="effect-grid" id="effectGrid">
+          <button type="button" class="effect-tile" data-effect="blur">
+            <canvas class="effect-thumb" id="effectThumbBlur"></canvas>
+            <span>블러</span>
+          </button>
+          <button type="button" class="effect-tile" data-effect="noise">
+            <canvas class="effect-thumb" id="effectThumbNoise"></canvas>
+            <span>노이즈</span>
+          </button>
+          <button type="button" class="effect-tile" data-effect="bw">
+            <canvas class="effect-thumb" id="effectThumbBw"></canvas>
+            <span>흑백</span>
+          </button>
+        </div>
+
+        <div class="effect-detail" id="effectDetailBlur" hidden>
+          <button type="button" class="effect-back" data-effect-back>← 목록으로</button>
+          <label class="field">
+            <span class="row"><span>가우시안 블러</span><span id="blurVal">0</span></span>
+            <input type="range" id="blurRange" min="0" max="30" value="0">
+          </label>
+        </div>
+
+        <div class="effect-detail" id="effectDetailNoise" hidden>
+          <button type="button" class="effect-back" data-effect-back>← 목록으로</button>
+          <label class="field">
+            <span class="row"><span>노이즈 추가</span><span id="noiseVal">0</span></span>
+            <input type="range" id="noiseRange" min="0" max="100" value="0">
+          </label>
+          <div class="checkline">
+            <input type="checkbox" id="noiseMono">
+            <label for="noiseMono">단색</label>
+          </div>
+        </div>
+
+        <div class="effect-detail" id="effectDetailBw" hidden>
+          <button type="button" class="effect-back" data-effect-back>← 목록으로</button>
+          <label class="field">
+            <span class="row"><span>흑백 강도</span><span id="bwVal">0</span></span>
+            <input type="range" id="bwRange" min="0" max="100" value="0">
+          </label>
+        </div>
       </div>
     </details>
 
@@ -1132,9 +1173,8 @@
     closeBtn.disabled=true;
     dimsInfo.textContent='이미지 없음';
     fileInput.value='';
-    blurRange.value=0; noiseRange.value=0;
-    document.getElementById('blurVal').textContent='0';
-    document.getElementById('noiseVal').textContent='0';
+    resetEffectsInputs();
+    showEffectGrid();
     resetSCInputs();
     resetLevelsInputs();
     curvePoints=[[0,0],[255,255]];
@@ -2257,33 +2297,118 @@
     return out;
   }
 
-  // ---------- Effects: blur + noise ----------
+  // ---------- Effects: 블러 / 노이즈 / 흑백 (picker grid → per-effect detail) ----------
   const blurRange = document.getElementById('blurRange');
   const noiseRange = document.getElementById('noiseRange');
+  const noiseMonoChk = document.getElementById('noiseMono');
+  const bwRange = document.getElementById('bwRange');
+
+  function addNoise(result, amt, mono){
+    for(let i=0;i<result.length;i+=4){
+      if(mono){
+        const n = (Math.random()*2-1)*amt;
+        result[i]+=n; result[i+1]+=n; result[i+2]+=n;
+      } else {
+        // Photoshop's default noise perturbs each channel independently,
+        // producing colored speckle rather than pure luminance grain.
+        result[i]   += (Math.random()*2-1)*amt;
+        result[i+1] += (Math.random()*2-1)*amt;
+        result[i+2] += (Math.random()*2-1)*amt;
+      }
+    }
+  }
+  function applyGrayscale(result, amt){
+    const t = amt/100;
+    for(let i=0;i<result.length;i+=4){
+      const gray = result[i]*0.299 + result[i+1]*0.587 + result[i+2]*0.114;
+      result[i]   = result[i]  *(1-t) + gray*t;
+      result[i+1] = result[i+1]*(1-t) + gray*t;
+      result[i+2] = result[i+2]*(1-t) + gray*t;
+    }
+  }
   function runEffectsPreview(){
     beginEdit();
     const radius = parseInt(blurRange.value,10);
     const noiseAmt = parseInt(noiseRange.value,10);
+    const noiseMono = noiseMonoChk.checked;
+    const bwAmt = parseInt(bwRange.value,10);
     previewEffect((data,w,h)=>{
       let result = radius>0 ? unpremultiplyAlpha(gaussianApprox(premultiplyAlpha(data),w,h,radius)) : data;
-      if(noiseAmt>0){
-        result = new Uint8ClampedArray(result);
-        for(let i=0;i<result.length;i+=4){
-          const n = (Math.random()*2-1)*noiseAmt;
-          result[i]+=n; result[i+1]+=n; result[i+2]+=n;
-        }
-      }
+      if(noiseAmt>0){ result = new Uint8ClampedArray(result); addNoise(result, noiseAmt, noiseMono); }
+      if(bwAmt>0){ result = new Uint8ClampedArray(result); applyGrayscale(result, bwAmt); }
       return result;
     });
   }
   blurRange.addEventListener('input', ()=>{document.getElementById('blurVal').textContent=blurRange.value; runEffectsPreview();});
   noiseRange.addEventListener('input', ()=>{document.getElementById('noiseVal').textContent=noiseRange.value; runEffectsPreview();});
+  noiseMonoChk.addEventListener('change', runEffectsPreview);
+  bwRange.addEventListener('input', ()=>{document.getElementById('bwVal').textContent=bwRange.value; runEffectsPreview();});
   function resetEffectsInputs(){
-    blurRange.value=0; noiseRange.value=0;
-    document.getElementById('blurVal').textContent='0'; document.getElementById('noiseVal').textContent='0';
+    blurRange.value=0; noiseRange.value=0; bwRange.value=0; noiseMonoChk.checked=false;
+    document.getElementById('blurVal').textContent='0';
+    document.getElementById('noiseVal').textContent='0';
+    document.getElementById('bwVal').textContent='0';
   }
   function applyEffectsAction(){ commitEdit(); resetEffectsInputs(); }
   function cancelEffectsAction(){ cancelEdit(); resetEffectsInputs(); }
+
+  // Picker grid ⇄ per-effect detail navigation.
+  const effectGridEl = document.getElementById('effectGrid');
+  function showEffectGrid(){
+    effectGridEl.hidden = false;
+    document.querySelectorAll('.effect-detail').forEach(el=> el.hidden=true);
+  }
+  function showEffectDetail(name){
+    effectGridEl.hidden = true;
+    document.querySelectorAll('.effect-detail').forEach(el=> el.hidden=true);
+    const map = {blur:'effectDetailBlur', noise:'effectDetailNoise', bw:'effectDetailBw'};
+    const el = document.getElementById(map[name]);
+    if(el) el.hidden = false;
+  }
+  document.querySelectorAll('.effect-tile').forEach(tile=>{
+    tile.addEventListener('click', ()=> showEffectDetail(tile.dataset.effect));
+  });
+  document.querySelectorAll('[data-effect-back]').forEach(btn=>{
+    btn.addEventListener('click', showEffectGrid);
+  });
+
+  // Each thumbnail previews what that one effect alone (at a fixed,
+  // representative strength) would look like on the image as it is right
+  // now — regenerated once per 효과 session, not live with the sliders,
+  // since it's a "what is this filter" swatch rather than the real preview.
+  function renderEffectThumbnails(){
+    if(!editingSnapshot) return;
+    const layerSnap = editingSnapshot.layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layerSnap) return;
+    const THUMB = 96;
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = editingSnapshot.w; srcCanvas.height = editingSnapshot.h;
+    srcCanvas.getContext('2d').putImageData(layerSnap.img, 0, 0);
+    const sw = editingSnapshot.w, sh = editingSnapshot.h;
+    const side = Math.min(sw, sh);
+    const sx = (sw-side)/2, sy = (sh-side)/2;
+
+    function baseThumbData(){
+      const c = document.createElement('canvas');
+      c.width = THUMB; c.height = THUMB;
+      const tctx = c.getContext('2d');
+      tctx.drawImage(srcCanvas, sx, sy, side, side, 0, 0, THUMB, THUMB);
+      return tctx.getImageData(0,0,THUMB,THUMB);
+    }
+    function paint(canvasId, transformFn){
+      const canvasEl = document.getElementById(canvasId);
+      canvasEl.width = THUMB; canvasEl.height = THUMB;
+      const id = baseThumbData();
+      if(transformFn) transformFn(id.data);
+      canvasEl.getContext('2d').putImageData(id,0,0);
+    }
+    paint('effectThumbBlur', data=>{
+      const blurred = unpremultiplyAlpha(gaussianApprox(premultiplyAlpha(data), THUMB, THUMB, 4));
+      data.set(blurred);
+    });
+    paint('effectThumbNoise', data=> addNoise(data, 35, false));
+    paint('effectThumbBw', data=> applyGrayscale(data, 100));
+  }
 
   // ---------- Selective color (Photoshop-style: 9 color ranges × C/M/Y/K) ----------
   function rgbToHue(r,g,b){
@@ -2637,6 +2762,10 @@
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
       if(id==='group-bgremove') runAutoBgDetect();
+      if(id==='group-effects'){
+        showEffectGrid();
+        renderEffectThumbnails();
+      }
     }
   }
   function onMenuClose(id){
