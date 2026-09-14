@@ -2223,9 +2223,8 @@
   // already active IS a matching adjustment layer (the user selected it from
   // the panel to re-edit it), reuse it and return its stored params for the
   // caller to load into the UI. Otherwise create a brand-new layer right now
-  // — sourced from, and inserted directly above, the active layer — hide
-  // that source layer (so the new one's full replacement result isn't
-  // double-composited over it), and leave activeLayerId untouched.
+  // and leave activeLayerId untouched (so the active layer never changes just
+  // from applying an adjustment).
   function beginAdjustmentSession(type, baseName){
     const active = activeLayer();
     if(!active) return null;
@@ -2234,13 +2233,26 @@
       previewSourceLayerId = active.adjustmentSourceLayerId;
       return active.adjustmentParams;
     }
-    const source = active;
+    // Since applying an adjustment never changes the active layer, the active
+    // layer stays the untouched original image through an entire chain of
+    // adjustments (선택색상 → 레벨 → 곡선 ...) unless there's some other,
+    // separately user-added layer to actually keep it pointed at. Sourcing
+    // every new adjustment from "the active layer" in that all-original case
+    // would keep inserting each one right above the original instead of on
+    // top of the previous adjustment — so when the original image is the
+    // only non-adjustment layer in the stack, source from (and insert above)
+    // the topmost layer instead, continuing the existing chain.
+    const onlyOriginalLayer = layers.filter(l=>!l.adjustmentType).length===1;
+    const source = onlyOriginalLayer ? layers[layers.length-1] : active;
     const newLayer = createLayer(nextAdjustmentLayerName(baseName, type), mainCanvas.width, mainCanvas.height);
     newLayer.ctx.drawImage(source.canvas, 0, 0);
     newLayer.adjustmentType = type;
     newLayer.adjustmentSourceLayerId = source.id;
     const idx = layers.indexOf(source);
     layers.splice(idx+1, 0, newLayer);
+    // Hides the layer this one was sourced from — since the new layer is a
+    // full replacement of that layer's pixels, keeping both visible would
+    // double-composite it.
     source.visible = false;
     previewSourceLayerId = source.id;
     previewTargetLayerId = newLayer.id;
