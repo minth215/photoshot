@@ -117,14 +117,16 @@
   .crop-frame{position:absolute;inset:0;overflow:hidden;pointer-events:auto;touch-action:none;z-index:20;cursor:move;}
   .crop-autozoom-toggle{
     display:none;position:absolute;top:10px;left:10px;z-index:25;
-    align-items:center;gap:8px;padding:6px 10px;border-radius:8px;
-    background:rgba(21,23,26,.75);border:1px solid var(--line);
+    align-items:center;gap:6px;
     font-size:12px;color:var(--text);white-space:nowrap;
+    text-shadow:0 1px 3px rgba(0,0,0,.6);
   }
   body.crop-editing .crop-autozoom-toggle{display:flex;}
+  .crop-autozoom-toggle .switch{width:34px;height:20px;}
+  .crop-autozoom-toggle .switch-thumb{width:16px;height:16px;}
+  .crop-autozoom-toggle .switch input:checked + .switch-track .switch-thumb{transform:translateX(14px);}
   .crop-rect{
     position:absolute;pointer-events:none;
-    box-shadow:0 0 0 9999px rgba(0,0,0,.55);
     border:1px solid rgba(255,255,255,.9);
   }
   .circle-crop-mask{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
@@ -185,7 +187,12 @@
     box-shadow:-2px 4px 16px rgba(0,0,0,.45);
   }
   .layer-panel.collapsed{display:none;}
+  /* While open (floating, mobile), the panel grows up into the bookmark
+     tab's own spot instead of leaving it empty above — the bookmark itself
+     hides via JS at the same time (see toggleLayerPanel). */
+  .layer-panel:not(.collapsed):not(.docked){top:14px;}
   .layer-panel-header{padding:9px 8px 9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .layer-panel-header span:first-child{cursor:pointer;}
   .layer-add-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-add-btn:hover{color:var(--accent);background:rgba(79,209,197,.12);}
   .layer-add-btn svg{width:17px;height:17px;}
@@ -450,7 +457,7 @@
     </button>
     <div class="layer-panel collapsed" id="layerPanel">
       <div class="layer-panel-header">
-        <span>레이어</span>
+        <span id="layerPanelHeaderLabel">레이어</span>
         <button type="button" id="addLayerBtn" class="layer-add-btn" title="새 레이어 추가" aria-label="새 레이어 추가">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -493,7 +500,7 @@
       </button>
       <button class="tab-btn" type="button" data-target="group-selection">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
-        <span>선택영역</span>
+        <span>영역 선택</span>
       </button>
       <button class="tab-btn" type="button" data-target="group-bgremove">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
@@ -574,7 +581,7 @@
           <button type="button" class="effect-back" data-effect-back>← 목록으로</button>
           <label class="field">
             <span class="row"><span>가우시안 블러</span><span id="blurVal">3</span></span>
-            <input type="range" id="blurRange" min="0" max="30" value="3">
+            <input type="range" id="blurRange" min="0" max="30" value="2">
           </label>
         </div>
 
@@ -699,7 +706,7 @@
     </details>
 
     <details class="group collapsed" id="group-selection" open>
-      <summary>선택 영역</summary>
+      <summary>영역 선택</summary>
       <div class="group-body">
         <div class="toolrow">
           <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
@@ -793,6 +800,7 @@
   const headerCropSize = document.getElementById('headerCropSize');
   const layerToggleBtn = document.getElementById('layerToggleBtn');
   const layerPanel = document.getElementById('layerPanel');
+  const layerPanelHeaderLabel = document.getElementById('layerPanelHeaderLabel');
   const layerList = document.getElementById('layerList');
 
   // ---------- Desktop layout: layer panel docked in the sidebar ----------
@@ -882,7 +890,7 @@
   function createLayer(name, w, h){
     const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
     return { id: nextLayerId++, name, canvas, ctx: lctx, visible:true, locked:false, opacity:1, blendMode:'normal',
-      adjustmentType:null, adjustmentParams:null, adjustmentSourceLayerId:null };
+      adjustmentType:null, adjustmentParams:null, adjustmentSourceLayerId:null, adjustmentMaskThumb:null };
   }
   // Creates a layer at (w,h) copying id/name/visible/locked/opacity/blendMode
   // from a snapshot entry, but leaves its canvas blank — for callers that are
@@ -890,7 +898,8 @@
   function layerShellFromSnapshot(ls, w, h){
     const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
     return { id: ls.id, name: ls.name, canvas, ctx: lctx, visible: ls.visible, locked: ls.locked, opacity: ls.opacity, blendMode: ls.blendMode||'normal',
-      adjustmentType: ls.adjustmentType||null, adjustmentParams: ls.adjustmentParams||null, adjustmentSourceLayerId: ls.adjustmentSourceLayerId||null };
+      adjustmentType: ls.adjustmentType||null, adjustmentParams: ls.adjustmentParams||null, adjustmentSourceLayerId: ls.adjustmentSourceLayerId||null,
+      adjustmentMaskThumb: ls.adjustmentMaskThumb||null };
   }
   function layerFromSnapshot(ls, w, h){
     const layer = layerShellFromSnapshot(ls, w, h);
@@ -1075,8 +1084,18 @@
       const thumb = row.querySelector('.layer-thumb');
       thumb.width = 28; thumb.height = 28;
       const tctx = thumb.getContext('2d');
-      tctx.fillStyle = '#000'; tctx.fillRect(0,0,28,28);
-      if(layer.canvas.width && layer.canvas.height) tctx.drawImage(layer.canvas,0,0,28,28);
+      if(layer.adjustmentType){
+        // 선택색상/레벨/곡선 layers show the region they affect instead of the
+        // (fully-replaced) image content: solid black when applied to the
+        // whole layer, or black-over-white matching the selection that was
+        // active when the adjustment was created.
+        tctx.fillStyle = '#fff'; tctx.fillRect(0,0,28,28);
+        if(layer.adjustmentMaskThumb) tctx.drawImage(layer.adjustmentMaskThumb,0,0,28,28);
+        else { tctx.fillStyle = '#000'; tctx.fillRect(0,0,28,28); }
+      } else {
+        tctx.fillStyle = '#000'; tctx.fillRect(0,0,28,28);
+        if(layer.canvas.width && layer.canvas.height) tctx.drawImage(layer.canvas,0,0,28,28);
+      }
 
       row.addEventListener('click', e=>{
         if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
@@ -1127,10 +1146,21 @@
       attachLayerDrag(row, layer);
     }
   }
-  layerToggleBtn.addEventListener('click', ()=>{
+  function toggleLayerPanel(){
     layerPanel.classList.toggle('collapsed');
-    layerToggleBtn.classList.toggle('active', !layerPanel.classList.contains('collapsed'));
-  });
+    const isOpen = !layerPanel.classList.contains('collapsed');
+    layerToggleBtn.classList.toggle('active', isOpen);
+    // The bookmark tab hides while the panel is open — the panel's own CSS
+    // grows up into the space it left behind (see .layer-panel:not(.collapsed)).
+    // Desktop keeps the bookmark permanently hidden via its own !important
+    // rule regardless of this.
+    layerToggleBtn.style.display = isOpen ? 'none' : 'flex';
+  }
+  layerToggleBtn.addEventListener('click', toggleLayerPanel);
+  // On mobile the bookmark tab hides while the panel is open (see the
+  // .layer-tab-btn CSS rule) — the panel grows up into the space it left
+  // behind, and its own "레이어" label becomes the way to collapse it again.
+  layerPanelHeaderLabel.addEventListener('click', toggleLayerPanel);
   const addLayerBtn = document.getElementById('addLayerBtn');
   addLayerBtn.addEventListener('click', ()=>{
     if(!mainCanvas.width || !mainCanvas.height) return;
@@ -1400,6 +1430,9 @@
         adjustmentType: l.adjustmentType||null,
         adjustmentParams: l.adjustmentParams ? JSON.parse(JSON.stringify(l.adjustmentParams)) : null,
         adjustmentSourceLayerId: l.adjustmentSourceLayerId||null,
+        // A small, fixed-size, never-repainted canvas — safe to share by
+        // reference across snapshots instead of cloning like the pixel data.
+        adjustmentMaskThumb: l.adjustmentMaskThumb||null,
         img: l.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height)
       })),
       activeLayerId,
@@ -1634,6 +1667,22 @@
     featherToggle.checked = false;
     featherWrap.style.display = 'none';
     featherOnMask = null;
+  }
+  // 영역 선택 opens with feather ON by default — mirrors exactly what
+  // checking the box does, applied to whatever the current selection already
+  // is. Doesn't mark the session dirty: it's a passive default, not something
+  // the user asked for, so backing out via 취소 without touching anything
+  // else stays a silent no-op instead of prompting a confirm.
+  function applyDefaultFeather(){
+    ensureMaskInitialized();
+    featherToggle.checked = true;
+    featherWrap.style.display = '';
+    featherRange.value = 20;
+    document.getElementById('featherVal').textContent = '20';
+    featherOnMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+    const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, 20);
+    mctx.putImageData(blurred,0,0);
+    renderSelectionOverlay();
   }
   function applySelectionAction(){ commitEdit(); resetFeatherUI(); }
   function cancelSelectionAction(){ cancelEdit(); resetFeatherUI(); }
@@ -1943,6 +1992,19 @@
     const pts = [...activePointers.values()];
     return [ (pts[0].x+pts[1].x)/2, (pts[0].y+pts[1].y)/2 ];
   }
+  // A pinch-to-zoom almost never keeps the two fingers perfectly aligned, so a
+  // raw 1:1 angle-to-rotation mapping picks up rotation the user never meant —
+  // a small dead zone ignores that incidental angle change entirely. Past the
+  // dead zone the user IS deliberately rotating, where a damping factor below
+  // 1 asks for more physical finger rotation per degree of actual rotation,
+  // for finer control than a direct 1:1 mapping would give.
+  const ROTATE_DEADZONE_DEG = 6;
+  const ROTATE_SENSITIVITY = 0.4;
+  function dampedRotationDelta(rawAngleDelta){
+    const mag = Math.abs(rawAngleDelta);
+    if(mag <= ROTATE_DEADZONE_DEG) return 0;
+    return Math.sign(rawAngleDelta) * (mag-ROTATE_DEADZONE_DEG) * ROTATE_SENSITIVITY;
+  }
   function startPinch(){
     endPeek(); // a second finger joining a before/after peek should zoom, not stay peeked
     // A second finger joining mid-stroke means this was a zoom/pan gesture, not
@@ -1992,7 +2054,7 @@
       applyCanvasDisplaySize();
     }
     if(cropModeActive){
-      const angleDelta = pointerAngle()-pinchStartAngle;
+      const angleDelta = dampedRotationDelta(pointerAngle()-pinchStartAngle);
       previewRotation(Math.max(-45, Math.min(45, pinchStartRotation+angleDelta)));
       updateRulerUI();
     }
@@ -2231,6 +2293,29 @@
     const count = layers.filter(l=>l.adjustmentType===type).length;
     return count===0 ? baseName : (baseName+' '+(count+1));
   }
+  // Snapshots the CURRENT selection (if any) as a small, fixed-size black+alpha
+  // canvas for the layer panel thumbnail — captured once at adjustment-layer
+  // creation time so it stays accurate for that layer's whole lifetime
+  // regardless of the selection being changed or cleared afterward, and so it
+  // never needs to be resized when the image itself is later cropped/resized.
+  // Returns null when there's no selection (the adjustment applies to the
+  // whole layer), which the thumbnail renders as solid black.
+  function captureAdjustmentMaskThumb(){
+    if(!hasSelection) return null;
+    const w = maskCanvas.width, h = maskCanvas.height;
+    if(!w || !h) return null;
+    const THUMB = 40;
+    const src = mctx.getImageData(0,0,w,h).data;
+    const blackAlpha = new ImageData(w,h);
+    for(let i=0;i<src.length;i+=4) blackAlpha.data[i+3] = src[i+3];
+    const full = document.createElement('canvas');
+    full.width = w; full.height = h;
+    full.getContext('2d').putImageData(blackAlpha,0,0);
+    const thumb = document.createElement('canvas');
+    thumb.width = THUMB; thumb.height = THUMB;
+    thumb.getContext('2d').drawImage(full, 0, 0, THUMB, THUMB);
+    return thumb;
+  }
   // Called from onMenuOpen for group-sc/levels/curve. If the layer that was
   // already active IS a matching adjustment layer (the user selected it from
   // the panel to re-edit it), reuse it and return its stored params for the
@@ -2260,6 +2345,7 @@
     newLayer.ctx.drawImage(source.canvas, 0, 0);
     newLayer.adjustmentType = type;
     newLayer.adjustmentSourceLayerId = source.id;
+    newLayer.adjustmentMaskThumb = captureAdjustmentMaskThumb();
     const idx = layers.indexOf(source);
     layers.splice(idx+1, 0, newLayer);
     // Hides the layer this one was sourced from — since the new layer is a
@@ -2975,8 +3061,8 @@
   noiseMonoChk.addEventListener('change', runEffectsPreview);
   bwRange.addEventListener('input', ()=>{document.getElementById('bwVal').textContent=bwRange.value; runEffectsPreview();});
   function resetEffectsInputs(){
-    blurRange.value=3; noiseRange.value=12; bwRange.value=0; noiseMonoChk.checked=false;
-    document.getElementById('blurVal').textContent='3';
+    blurRange.value=2; noiseRange.value=12; bwRange.value=0; noiseMonoChk.checked=false;
+    document.getElementById('blurVal').textContent='2';
     document.getElementById('noiseVal').textContent='12';
     document.getElementById('bwVal').textContent='0';
     currentEffectName = null;
@@ -3474,6 +3560,7 @@
         strokeUndoStack = []; strokeRedoStack = [];
         updateDrawHistoryButtons();
       }
+      if(id==='group-selection') applyDefaultFeather();
       const tool = MENU_TOOL[id];
       if(tool) setTool(tool);
       if(id==='group-bgremove') runAutoBgDetect();
