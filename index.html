@@ -169,7 +169,7 @@
   .layer-panel-header{padding:9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);}
   .layer-list{overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:4px;}
   .layer-row{
-    display:grid;grid-template-columns:28px 1fr auto auto;grid-template-rows:auto auto;
+    display:grid;grid-template-columns:28px 1fr auto auto;grid-template-rows:auto auto auto;
     align-items:center;column-gap:8px;row-gap:4px;
     padding:6px 8px;border-radius:6px;border:1px solid transparent;
     background:var(--panel-2);touch-action:none;
@@ -182,7 +182,9 @@
   .layer-icon-btn svg{width:16px;height:16px;}
   .layer-icon-btn.off{color:var(--text-dim);opacity:.4;}
   .layer-icon-btn.on{color:var(--accent);opacity:1;}
-  .layer-opacity-row{grid-row:2;grid-column:1 / -1;display:flex;align-items:center;gap:6px;}
+  .layer-blend-row{grid-row:2;grid-column:1 / -1;}
+  .layer-blend-row select{padding:4px 6px;font-size:11px;height:26px;}
+  .layer-opacity-row{grid-row:3;grid-column:1 / -1;display:flex;align-items:center;gap:6px;}
   .layer-opacity-row input[type=range]{flex:1;height:14px;}
   .layer-opacity-row span{font-family:var(--mono);font-size:10px;color:var(--text-dim);width:30px;text-align:right;}
   input[type=color]{width:100%;height:34px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:5px;cursor:pointer;}
@@ -644,6 +646,29 @@
   let activeLayerId = null;
   let nextLayerId = 1;
 
+  // Photoshop-style blend modes mapped to their native canvas equivalents
+  // (identical algorithms for every mode here, so no per-pixel JS blending
+  // is needed — the browser composites them directly).
+  const BLEND_MODES = [
+    ['normal','표준'],
+    ['darken','어둡게 하기'],
+    ['multiply','곱하기'],
+    ['color-burn','색상 번'],
+    ['lighten','밝게 하기'],
+    ['screen','스크린'],
+    ['color-dodge','색상 닷지'],
+    ['lighter','선형 닷지(추가)'],
+    ['overlay','오버레이'],
+    ['soft-light','소프트 라이트'],
+    ['hard-light','하드 라이트'],
+    ['difference','차이'],
+    ['exclusion','제외'],
+    ['hue','색조'],
+    ['saturation','채도'],
+    ['color','색상'],
+    ['luminosity','광도']
+  ];
+
   function makeLayerCanvas(w,h){
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
@@ -651,14 +676,14 @@
   }
   function createLayer(name, w, h){
     const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
-    return { id: nextLayerId++, name, canvas, ctx: lctx, visible:true, locked:false, opacity:1 };
+    return { id: nextLayerId++, name, canvas, ctx: lctx, visible:true, locked:false, opacity:1, blendMode:'normal' };
   }
-  // Creates a layer at (w,h) copying id/name/visible/locked/opacity from a
-  // snapshot entry, but leaves its canvas blank — for callers that are about
-  // to draw scaled/rotated/cropped content into it themselves.
+  // Creates a layer at (w,h) copying id/name/visible/locked/opacity/blendMode
+  // from a snapshot entry, but leaves its canvas blank — for callers that are
+  // about to draw scaled/rotated/cropped content into it themselves.
   function layerShellFromSnapshot(ls, w, h){
     const {canvas, ctx:lctx} = makeLayerCanvas(w,h);
-    return { id: ls.id, name: ls.name, canvas, ctx: lctx, visible: ls.visible, locked: ls.locked, opacity: ls.opacity };
+    return { id: ls.id, name: ls.name, canvas, ctx: lctx, visible: ls.visible, locked: ls.locked, opacity: ls.opacity, blendMode: ls.blendMode||'normal' };
   }
   function layerFromSnapshot(ls, w, h){
     const layer = layerShellFromSnapshot(ls, w, h);
@@ -682,9 +707,11 @@
     layers.forEach(l=>{
       if(!l.visible) return;
       ctx.globalAlpha = l.opacity;
+      ctx.globalCompositeOperation = (l.blendMode && l.blendMode!=='normal') ? l.blendMode : 'source-over';
       ctx.drawImage(l.canvas,0,0);
     });
     ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
   }
   function selectLayer(id){
     if(id===activeLayerId) return;
@@ -707,7 +734,7 @@
     const HOLD_MS = 260, MOVE_CANCEL_PX = 8;
     let holdTimer = null, dragging = false, startY = 0, preDragSnapshot = null;
     function onDown(e){
-      if(e.target.closest('.layer-icon-btn,.layer-opacity-row')) return;
+      if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
       startY = e.clientY;
       holdTimer = setTimeout(()=>{
         holdTimer = null;
@@ -768,6 +795,7 @@
         '<span class="layer-name"></span>' +
         '<button type="button" class="layer-icon-btn layer-eye" title="표시/숨기기" aria-label="표시/숨기기"></button>' +
         '<button type="button" class="layer-icon-btn layer-lock" title="잠금" aria-label="잠금"></button>' +
+        '<div class="layer-blend-row"><select class="layer-blend"></select></div>' +
         '<div class="layer-opacity-row"><input type="range" class="layer-opacity" min="0" max="100"><span class="layer-opacity-val"></span></div>';
       row.querySelector('.layer-name').textContent = layer.name;
       const eyeBtn = row.querySelector('.layer-eye');
@@ -776,6 +804,13 @@
       const lockBtn = row.querySelector('.layer-lock');
       lockBtn.innerHTML = svgLock(layer.locked);
       lockBtn.classList.toggle('on', layer.locked);
+      const blendSelect = row.querySelector('.layer-blend');
+      BLEND_MODES.forEach(([value,label])=>{
+        const opt = document.createElement('option');
+        opt.value = value; opt.textContent = label;
+        blendSelect.appendChild(opt);
+      });
+      blendSelect.value = layer.blendMode || 'normal';
       const opacityInput = row.querySelector('.layer-opacity');
       opacityInput.value = Math.round(layer.opacity*100);
       row.querySelector('.layer-opacity-val').textContent = Math.round(layer.opacity*100)+'%';
@@ -788,7 +823,7 @@
       if(layer.canvas.width && layer.canvas.height) tctx.drawImage(layer.canvas,0,0,28,28);
 
       row.addEventListener('click', e=>{
-        if(e.target.closest('.layer-icon-btn,.layer-opacity-row')) return;
+        if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
         selectLayer(layer.id);
       });
       eyeBtn.addEventListener('click', e=>{
@@ -803,6 +838,12 @@
         pushUndo(snapshotState());
         layer.locked = !layer.locked;
         renderLayerPanel();
+      });
+      blendSelect.addEventListener('click', e=> e.stopPropagation());
+      blendSelect.addEventListener('change', ()=>{
+        pushUndo(snapshotState());
+        layer.blendMode = blendSelect.value;
+        compositeLayers();
       });
       let opacityPreDrag = null;
       opacityInput.addEventListener('pointerdown', e=>{ e.stopPropagation(); opacityPreDrag = snapshotState(); });
@@ -967,13 +1008,14 @@
 
   // ---------- Undo ----------
   // A snapshot captures the WHOLE document: every layer's pixels plus its
-  // visibility/lock/opacity/order, the active layer, and the shared selection
-  // mask — since any of these (not just pixel edits) can be undone.
+  // visibility/lock/opacity/blend mode/order, the active layer, and the
+  // shared selection mask — since any of these (not just pixel edits) can be
+  // undone.
   function snapshotState(){
     return {
       w: mainCanvas.width, h: mainCanvas.height,
       layers: layers.map(l => ({
-        id:l.id, name:l.name, visible:l.visible, locked:l.locked, opacity:l.opacity,
+        id:l.id, name:l.name, visible:l.visible, locked:l.locked, opacity:l.opacity, blendMode:l.blendMode,
         img: l.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height)
       })),
       activeLayerId,
@@ -1941,7 +1983,7 @@
     layers = oldLayers.map(l=>{
       const {canvas, ctx:lctx} = makeLayerCanvas(cropPxW, cropPxH);
       lctx.drawImage(l.canvas, x,y,cropPxW,cropPxH, 0,0,cropPxW,cropPxH);
-      return { id:l.id, name:l.name, canvas, ctx:lctx, visible:l.visible, locked:l.locked, opacity:l.opacity };
+      return { id:l.id, name:l.name, canvas, ctx:lctx, visible:l.visible, locked:l.locked, opacity:l.opacity, blendMode:l.blendMode };
     });
     setCanvasSize(cropPxW,cropPxH);
     hasSelection=false;
