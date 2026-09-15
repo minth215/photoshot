@@ -227,11 +227,17 @@
     }
     body.no-image .empty-state-actions button:active{transform:scale(.985);}
     body.no-image .empty-state-actions .primary{
-      background:linear-gradient(90deg,#3ddc97,#8b7bf5);
+      /* A plain 2-stop diagonal gradient on a short, wide pill puts the top-right
+         and bottom-left corners well short of the pure end colors (they land
+         partway along the diagonal), which reads as a stray purple/mint fringe
+         right at the rounded caps. Holding each end color flat for a stretch
+         before the diagonal transition starts keeps the diagonal look while
+         both caps stay a single solid color all the way around their curve. */
+      background:linear-gradient(135deg,#3ddc97 22%,#8b7bf5 78%);
       box-shadow:0 0 10px 1px rgba(61,220,151,.18);
       color:#0e0e12;border-color:transparent;
     }
-    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(90deg,#3ddc97,#8b7bf5);}
+    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 22%,#8b7bf5 78%);}
     body.no-image .empty-state-actions .ghost{
       background:#1c1b23;border-color:transparent;color:#f5f4f8;
       box-shadow:0 0 10px 1px rgba(61,220,151,.18);
@@ -1197,22 +1203,27 @@
     }
     function onMove(e){
       if(dragging){
-        const rows = [...layerList.querySelectorAll('.layer-row')];
-        const idx = rows.indexOf(row);
+        // Recompute the dragged row's target slot from scratch against every
+        // other row's current midpoint (rather than swapping one step at a
+        // time relative to its old position) — otherwise a single fast move
+        // that already crosses two or more rows' midpoints before the next
+        // pointermove fires only ever advances by one slot per event.
         const y = e.clientY;
-        for(let i=0;i<rows.length;i++){
-          if(rows[i]===row) continue;
-          const r = rows[i].getBoundingClientRect();
-          const mid = r.top + r.height/2;
-          if((i<idx && y<mid) || (i>idx && y>mid)){
-            layerList.insertBefore(row, i<idx ? rows[i] : rows[i].nextSibling);
-            const newTopToBottomIds = [...layerList.querySelectorAll('.layer-row')].map(r2=>parseInt(r2.dataset.layerId,10));
-            const idToLayer = new Map(layers.map(l=>[l.id,l]));
-            layers = newTopToBottomIds.slice().reverse().map(id=>idToLayer.get(id));
-            compositeLayers();
-            break;
-          }
+        const others = [...layerList.querySelectorAll('.layer-row')].filter(r=>r!==row);
+        let insertBeforeEl = null;
+        for(const r of others){
+          const rect = r.getBoundingClientRect();
+          if(y < rect.top + rect.height/2){ insertBeforeEl = r; break; }
         }
+        if(insertBeforeEl){
+          if(row.nextSibling !== insertBeforeEl) layerList.insertBefore(row, insertBeforeEl);
+        } else if(layerList.lastElementChild !== row){
+          layerList.appendChild(row);
+        }
+        const newTopToBottomIds = [...layerList.querySelectorAll('.layer-row')].map(r2=>parseInt(r2.dataset.layerId,10));
+        const idToLayer = new Map(layers.map(l=>[l.id,l]));
+        layers = newTopToBottomIds.slice().reverse().map(id=>idToLayer.get(id));
+        compositeLayers();
         return;
       }
       // The row needs touch-action:none for the hold-to-drag gesture below to
@@ -1235,6 +1246,13 @@
         dragging = false;
         if(preDragSnapshot) pushUndo(preDragSnapshot);
         preDragSnapshot = null;
+        // pointerCapture routes the browser's own synthesized "click" (fired
+        // right after this pointerup) to this same row — even though
+        // renderLayerPanel() below immediately replaces it with a fresh one —
+        // so without this flag that click would run the row's click handler
+        // and select the just-dragged layer, undoing whatever was selected
+        // (possibly a different layer entirely) before the drag started.
+        row._justDragged = true;
         renderLayerPanel();
       }
     }
@@ -1294,6 +1312,10 @@
       }
 
       row.addEventListener('click', e=>{
+        // Suppresses the browser's own synthesized click that follows a
+        // pointer-captured drag-reorder gesture (see attachLayerDrag's onUp)
+        // — otherwise finishing a drag would select the dragged row itself.
+        if(row._justDragged){ row._justDragged = false; return; }
         if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
         // Picking a different layer while a 선택색상/레벨/곡선 session is open
         // acts like pressing 취소 first — prompting only if something was
@@ -1545,6 +1567,7 @@
     setTool('none');
     downloadBtn.disabled=false;
     closeBtn.disabled=false;
+    scheduleProjectSave();
     if(profileAutomationMode) startForcedSquareCrop();
   }
   fileInput.addEventListener('change', e=>{
@@ -1667,6 +1690,9 @@
     // redo stack no longer leads anywhere, so it can't be replayed.
     redoStack = [];
     updateHistoryButtons();
+    // Virtually every discrete edit goes through here first, making it a
+    // single choke point for keeping the local backup current.
+    scheduleProjectSave();
   }
   function restoreState(s){
     setCanvasSize(s.w,s.h);
@@ -1688,6 +1714,7 @@
     redoStack.push(snapshotState());
     restoreState(s);
     updateHistoryButtons();
+    scheduleProjectSave();
   });
   resetBtn.addEventListener('click', ()=>{
     if(redoStack.length===0) return;
@@ -1695,10 +1722,12 @@
     undoStack.push(snapshotState());
     restoreState(s);
     updateHistoryButtons();
+    scheduleProjectSave();
   });
 
   // ---------- Close / discard ----------
   function resetToEmptyState(){
+    if(projectSaveTimer){ clearTimeout(projectSaveTimer); projectSaveTimer = null; }
     document.body.classList.add('no-image');
     canvasHolder.style.display='none';
     sidePanel.style.display='none';
@@ -1763,10 +1792,139 @@
     document.querySelectorAll('#sideGroups > .group').forEach(g=> g.classList.add('collapsed'));
   }
   closeBtn.addEventListener('click', ()=>{
-    if(window.confirm('진행 상황은 저장되지 않습니다. 새 작업을 시작할까요?')){
+    if(window.confirm('진행 상황이 삭제됩니다. 새 작업을 시작할까요?')){
       resetToEmptyState();
+      clearProjectStorage();
     }
   });
+
+  // ---------- Local persistence (survive a PWA background/reload) ----------
+  // As an installed PWA, the OS/browser can discard this page's whole JS
+  // state while it's backgrounded and it comes back as a fresh reload —
+  // losing everything unless it's saved somewhere that outlives the page.
+  // IndexedDB (not localStorage: layer pixels are ImageData objects, which
+  // structured-clone straight into IndexedDB and would blow past
+  // localStorage's much smaller quota) holds one single record: the whole
+  // project as of the last save. It's opportunistic — any failure (quota,
+  // private browsing, IndexedDB unavailable) just means this session isn't
+  // recoverable, never a hard error for the editor itself.
+  const IDB_NAME = 'photoshot-db', IDB_STORE = 'project', IDB_KEY = 'current';
+  let idbOpenPromise = null;
+  function openProjectDB(){
+    if(idbOpenPromise) return idbOpenPromise;
+    idbOpenPromise = new Promise((resolve,reject)=>{
+      if(!window.indexedDB){ reject(new Error('no indexedDB')); return; }
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = ()=>{ req.result.createObjectStore(IDB_STORE); };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error);
+    });
+    return idbOpenPromise;
+  }
+  async function saveProjectToStorage(){
+    if(!mainCanvas.width || !mainCanvas.height) return;
+    const snap = snapshotState();
+    const record = {
+      w: snap.w, h: snap.h, activeLayerId: snap.activeLayerId, hasSelection: snap.hasSelection, mask: snap.mask,
+      layers: snap.layers.map(l=>({
+        id:l.id, name:l.name, visible:l.visible, locked:l.locked, opacity:l.opacity, blendMode:l.blendMode,
+        adjustmentType:l.adjustmentType, adjustmentParams:l.adjustmentParams, adjustmentSourceLayerId:l.adjustmentSourceLayerId,
+        // Store the thumbnail's own pixels (structured-cloneable) rather than
+        // the <canvas> element itself, which IndexedDB can't clone.
+        adjustmentMaskThumb: l.adjustmentMaskThumb ? l.adjustmentMaskThumb.getContext('2d').getImageData(0,0,l.adjustmentMaskThumb.width,l.adjustmentMaskThumb.height) : null,
+        img: l.img
+      }))
+    };
+    try{
+      const db = await openProjectDB();
+      await new Promise((resolve,reject)=>{
+        const tx = db.transaction(IDB_STORE,'readwrite');
+        tx.objectStore(IDB_STORE).put(record, IDB_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = ()=> reject(tx.error);
+      });
+    }catch(err){ /* not recoverable this session — editing itself is unaffected */ }
+  }
+  async function clearProjectStorage(){
+    try{
+      const db = await openProjectDB();
+      await new Promise((resolve,reject)=>{
+        const tx = db.transaction(IDB_STORE,'readwrite');
+        tx.objectStore(IDB_STORE).delete(IDB_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = ()=> reject(tx.error);
+      });
+    }catch(err){}
+  }
+  async function loadProjectFromStorage(){
+    try{
+      const db = await openProjectDB();
+      return await new Promise((resolve,reject)=>{
+        const tx = db.transaction(IDB_STORE,'readonly');
+        const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+        req.onsuccess = ()=> resolve(req.result || null);
+        req.onerror = ()=> reject(req.error);
+      });
+    }catch(err){ return null; }
+  }
+  // Debounced on every edit (pushUndo covers essentially every discrete
+  // action) so a burst of edits doesn't re-save the whole canvas on each
+  // one; flushed immediately whenever the page is about to actually
+  // disappear, since a debounce timer never gets to fire after that.
+  let projectSaveTimer = null;
+  function scheduleProjectSave(){
+    if(projectSaveTimer) clearTimeout(projectSaveTimer);
+    projectSaveTimer = setTimeout(()=>{ projectSaveTimer = null; saveProjectToStorage(); }, 500);
+  }
+  function flushProjectSaveNow(){
+    if(projectSaveTimer){ clearTimeout(projectSaveTimer); projectSaveTimer = null; }
+    saveProjectToStorage();
+  }
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='hidden') flushProjectSaveNow();
+  });
+  window.addEventListener('pagehide', flushProjectSaveNow);
+  function restoreFromProjectRecord(rec){
+    setCanvasSize(rec.w, rec.h);
+    nextLayerId = 1;
+    layers = rec.layers.map(ls=>{
+      const layer = layerFromSnapshot({
+        id: ls.id, name: ls.name, visible: ls.visible, locked: ls.locked, opacity: ls.opacity, blendMode: ls.blendMode,
+        adjustmentType: ls.adjustmentType, adjustmentParams: ls.adjustmentParams, adjustmentSourceLayerId: ls.adjustmentSourceLayerId,
+        adjustmentMaskThumb: null, img: ls.img
+      }, rec.w, rec.h);
+      if(ls.adjustmentMaskThumb){
+        const thumb = document.createElement('canvas');
+        thumb.width = ls.adjustmentMaskThumb.width; thumb.height = ls.adjustmentMaskThumb.height;
+        thumb.getContext('2d').putImageData(ls.adjustmentMaskThumb, 0, 0);
+        layer.adjustmentMaskThumb = thumb;
+      }
+      nextLayerId = Math.max(nextLayerId, ls.id+1);
+      return layer;
+    });
+    activeLayerId = rec.activeLayerId;
+    mctx.putImageData(rec.mask, 0, 0);
+    hasSelection = rec.hasSelection;
+    undoStack = []; redoStack = [];
+    document.body.classList.remove('no-image');
+    emptyState.style.display='none';
+    canvasHolder.style.display='block';
+    sidePanel.style.display='block';
+    layerToggleBtn.style.display='flex';
+    updateHistoryButtons();
+    syncResizeInputs();
+    updateDims();
+    compositeLayers();
+    renderSelectionOverlay();
+    renderLayerPanel();
+    setTool('none');
+    downloadBtn.disabled=false;
+    closeBtn.disabled=false;
+  }
+  (async ()=>{
+    const rec = await loadProjectFromStorage();
+    if(rec && rec.w && rec.h && rec.layers && rec.layers.length) restoreFromProjectRecord(rec);
+  })();
 
   // ---------- Tools ----------
   const toolButtons = document.querySelectorAll('[data-tool]');
@@ -2528,6 +2686,12 @@
       out.data[i+3] = base[i+3]*(1-a) + effect[i+3]*a;
     }
     target.ctx.putImageData(out,0,0);
+    // Re-editing a layer that ISN'T topmost (e.g. going back to tweak the
+    // first of two 선택색상 layers while a 레벨 sits above it) would otherwise
+    // leave that 레벨 showing its old, frozen bake — it was never told this
+    // layer's pixels just changed. Cascade the same rebuild eye-toggling uses
+    // so every whole-layer adjustment above this one reflects it live too.
+    rebuildDependentAdjustmentLayers(layers.indexOf(target));
     compositeLayers();
   }
   function nextAdjustmentLayerName(baseName, type){
@@ -2958,6 +3122,15 @@
     runCurvePreview();
     applyCurveAction();
     endAdjustmentSession();
+
+    pushUndo(snapshotState());
+    const lipsLayer = createLayer('입술', mainCanvas.width, mainCanvas.height);
+    lipsLayer.blendMode = 'linear-burn';
+    lipsLayer.opacity = 0.22;
+    layers.push(lipsLayer);
+    activeLayerId = lipsLayer.id;
+    compositeLayers();
+    renderLayerPanel();
 
     if(layerPanel.classList.contains('collapsed')) toggleLayerPanel();
   }
