@@ -1819,10 +1819,12 @@
   // Being tabindex=0, a plain click would otherwise move focus onto the cat
   // itself, blurring the URL-import input (if it's focused) and dismissing
   // the on-screen keyboard just from toggling the mode. Preventing the
-  // default mousedown/touchstart action stops that focus shift while still
-  // letting the click event fire normally right after.
+  // default mousedown action stops that focus shift while still letting
+  // the click event fire normally right after. NOTE: this must NOT also be
+  // done on touchstart — canceling touchstart's default tells the browser
+  // to skip synthesizing the mousedown/mouseup/click sequence entirely on
+  // real touch devices, which silently broke the tap-to-toggle interaction.
   profileModeCat.addEventListener('mousedown', e=> e.preventDefault());
-  profileModeCat.addEventListener('touchstart', e=> e.preventDefault(), {passive:false});
 
   // ---------- Undo ----------
   // A snapshot captures the WHOLE document: every layer's pixels plus its
