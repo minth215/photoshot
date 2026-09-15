@@ -206,17 +206,17 @@
     body.no-image .empty-state-bottom{width:100%;padding-bottom:56px;position:relative;z-index:1;}
     body.no-image .empty-state-cat{
       display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:12px;
-      cursor:pointer;transition:filter .15s;
+      cursor:pointer;
     }
-    body.no-image .empty-state-cat svg{transition:filter .15s;}
-    body.no-image .empty-state-cat.active svg{filter:drop-shadow(0 0 8px rgba(61,220,151,.85));}
     @keyframes cat-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
     body.no-image .cat-eye{animation:cat-blink 4s infinite;}
     body.no-image .cat-eye-l{transform-origin:23px 26px;}
     body.no-image .cat-eye-r{transform-origin:41px 26px;}
-    body.no-image .profile-mode-label{
-      display:block;text-align:center;font-weight:300;font-size:12px;
-      color:rgba(245,244,248,.5);margin-bottom:10px;
+    body.no-image .empty-state-actions{position:relative;}
+    body.no-image .profile-mode-label:not([hidden]){
+      display:block;position:absolute;left:0;right:0;bottom:100%;margin-bottom:10px;
+      text-align:center;font-weight:300;font-size:12px;
+      color:rgba(245,244,248,.5);
       font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
     }
     body.no-image .empty-state-actions button{
@@ -513,8 +513,8 @@
             <g class="cat-eye cat-eye-r"><circle cx="41" cy="26" r="6.5" fill="#ffd43b"></circle><circle cx="41.6" cy="26.6" r="4.6" fill="#0e0e12"></circle><circle cx="38.4" cy="23.6" r="1.9" fill="#fff"></circle></g>
           </svg>
         </div>
-        <div class="profile-mode-label" id="profileModeLabel" hidden>프로필 사진 편집 자동화 ON</div>
         <div class="empty-state-actions" id="emptyStateActions">
+          <div class="profile-mode-label" id="profileModeLabel" hidden>프로필 사진 편집 자동화 ON</div>
           <button class="primary" type="button" onclick="document.getElementById('fileInput').click()">
             <span class="btn-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5-9 9"></path></svg></span>
             이미지 선택하기
@@ -1552,7 +1552,6 @@
   const profileModeLabel = document.getElementById('profileModeLabel');
   function setProfileAutomationMode(on){
     profileAutomationMode = on;
-    profileModeCat.classList.toggle('active', on);
     profileModeLabel.hidden = !on;
   }
   profileModeCat.addEventListener('click', ()=> setProfileAutomationMode(!profileAutomationMode));
