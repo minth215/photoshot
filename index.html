@@ -208,13 +208,14 @@
       display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:0;
       cursor:pointer;position:relative;z-index:2;
     }
+    body.no-image .empty-state-cat.active svg{filter:drop-shadow(0 0 10px rgba(61,220,151,.5));}
     @keyframes cat-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
     body.no-image .cat-eye{animation:cat-blink 4s infinite;}
     body.no-image .cat-eye-l{transform-origin:23px 26px;}
     body.no-image .cat-eye-r{transform-origin:41px 26px;}
     body.no-image .empty-state-actions{position:relative;}
     body.no-image .profile-mode-label:not([hidden]){
-      display:block;position:absolute;left:0;right:0;bottom:100%;margin-bottom:10px;
+      display:block;position:absolute;left:0;right:0;bottom:100%;margin-bottom:5px;
       text-align:center;font-weight:300;font-size:12px;
       color:rgba(245,244,248,.5);
       font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
@@ -242,13 +243,13 @@
          width) before the diagonal can start, confirmed pixel-exact at
          that precise point across several widths. */
       background:linear-gradient(135deg,#3ddc97 65px,#8b7bf5 calc(100% - 65px));
-      box-shadow:0 0 10px 1px rgba(61,220,151,.18);
+      box-shadow:0 0 10px 2px rgba(61,220,151,.5);
       color:#0e0e12;border:none;
     }
     body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 65px,#8b7bf5 calc(100% - 65px));}
     body.no-image .empty-state-actions .ghost{
       background:#1c1b23;border-color:transparent;color:#f5f4f8;
-      box-shadow:0 0 10px 1px rgba(61,220,151,.18);
+      box-shadow:0 0 10px 2px rgba(61,220,151,.5);
     }
     body.no-image .empty-state-actions .ghost:hover{background:#26242f;}
     body.no-image .btn-icon{display:inline-flex;align-items:center;}
@@ -1661,6 +1662,7 @@
   const profileModeLabel = document.getElementById('profileModeLabel');
   function setProfileAutomationMode(on){
     profileAutomationMode = on;
+    profileModeCat.classList.toggle('active', on);
     profileModeLabel.hidden = !on;
   }
   profileModeCat.addEventListener('click', ()=> setProfileAutomationMode(!profileAutomationMode));
