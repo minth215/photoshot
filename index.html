@@ -2984,6 +2984,13 @@
       peekPrevTargetVisible = target.visible;
       peekPrevSourceVisible = source.visible;
       target.visible = false; source.visible = true;
+      // Swapping visibility alone only changes what's on screen if target is
+      // the topmost layer — any 선택색상/레벨/곡선 layer stacked above it is
+      // its own opaque, separately-baked canvas that still shows the old
+      // "after" pixels regardless, fully masking the comparison. Re-baking
+      // those dependents now (same call previewAdjustment() makes on every
+      // live edit) makes the peek visible through them too.
+      rebuildDependentAdjustmentLayers(layers.indexOf(target));
       compositeLayers();
       return;
     }
@@ -2993,6 +3000,10 @@
     isPeeking = true;
     peekAfterImage = layer.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height);
     layer.ctx.putImageData(layerSnap.img,0,0);
+    // Same reasoning as above: an adjustment layer stacked above the one
+    // being edited via 효과 needs its bake refreshed too, or it'll keep
+    // showing the "after" pixels straight through the peek.
+    rebuildDependentAdjustmentLayers(layers.indexOf(layer));
     compositeLayers();
   }
   function endPeek(){
@@ -3003,12 +3014,14 @@
       const source = layers.find(l=>l.id===previewSourceLayerId);
       if(target) target.visible = peekPrevTargetVisible;
       if(source) source.visible = peekPrevSourceVisible;
+      if(target) rebuildDependentAdjustmentLayers(layers.indexOf(target));
       compositeLayers();
       return;
     }
     const layer = editingSnapshot && layers.find(l=>l.id===editingSnapshot.activeLayerId);
     if(layer && peekAfterImage) layer.ctx.putImageData(peekAfterImage,0,0);
     peekAfterImage = null;
+    if(layer) rebuildDependentAdjustmentLayers(layers.indexOf(layer));
     compositeLayers();
   }
   function commitEdit(){
