@@ -315,11 +315,11 @@
        can never affect the cat's own position above it. */
     body.no-image .url-import-back{
       position:absolute;left:0;bottom:5px;z-index:3;
-      width:auto;height:auto;padding:0;border-radius:0;border:none;
+      width:auto;height:auto;padding:0;border-radius:0;border:none;gap:3px;
       display:flex;align-items:center;justify-content:flex-start;
-      background:none;box-shadow:none;color:rgba(245,244,248,.7);
+      background:none;box-shadow:none;color:rgba(245,244,248,.35);
       font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
-      font-size:13px;font-weight:600;
+      font-size:13px;font-weight:300;
     }
     /* Our own display:flex above outranks the browser's default
        [hidden]{display:none} (equal specificity, but ours comes later) —
@@ -365,9 +365,9 @@
     }
   }
   .url-import-back{
-    width:auto;height:auto;padding:0;border:none;flex-shrink:0;
+    width:auto;height:auto;padding:0;border:none;flex-shrink:0;gap:3px;
     align-self:flex-start;
-    background:none;box-shadow:none;color:var(--text-dim);font-size:13px;
+    background:none;box-shadow:none;color:var(--text-dim);font-size:13px;font-weight:300;
     display:flex;align-items:center;justify-content:flex-start;
   }
   .url-import-back[hidden]{display:none;}
@@ -639,7 +639,10 @@
       <div class="empty-state-spacer"></div>
       <div class="empty-state-bottom">
         <div class="empty-state-cat-row" id="emptyStateCatRow">
-          <button type="button" id="urlImportBack" class="url-import-back" hidden aria-label="뒤로">&lt; 뒤로</button>
+          <button type="button" id="urlImportBack" class="url-import-back" hidden aria-label="뒤로">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            뒤로
+          </button>
           <div class="empty-state-cat" id="profileModeCat" role="button" tabindex="0" aria-label="프로필 사진 자동화 모드 전환" title="프로필 사진 자동화 모드">
             <svg width="76" viewBox="0 0 64 34" aria-hidden="true">
               <path d="M8 27 L11.3 10 Q11.5 5.5 16 7.8 L30 17 Z" fill="#f5f4f8"></path>
@@ -1813,6 +1816,13 @@
   profileModeCat.addEventListener('keydown', e=>{
     if(e.key==='Enter' || e.key===' '){ e.preventDefault(); setProfileAutomationMode(!profileAutomationMode); }
   });
+  // Being tabindex=0, a plain click would otherwise move focus onto the cat
+  // itself, blurring the URL-import input (if it's focused) and dismissing
+  // the on-screen keyboard just from toggling the mode. Preventing the
+  // default mousedown/touchstart action stops that focus shift while still
+  // letting the click event fire normally right after.
+  profileModeCat.addEventListener('mousedown', e=> e.preventDefault());
+  profileModeCat.addEventListener('touchstart', e=> e.preventDefault(), {passive:false});
 
   // ---------- Undo ----------
   // A snapshot captures the WHOLE document: every layer's pixels plus its
