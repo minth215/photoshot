@@ -232,12 +232,17 @@
          partway along the diagonal), which reads as a stray purple/mint fringe
          right at the rounded caps. Holding each end color flat for a stretch
          before the diagonal transition starts keeps the diagonal look while
-         both caps stay a single solid color all the way around their curve. */
-      background:linear-gradient(135deg,#3ddc97 22%,#8b7bf5 78%);
+         both caps stay a single solid color all the way around their curve.
+         The needed flat-zone length is exactly height/√2 (≈40px at this
+         button's fixed 56px height) regardless of the button's width — using
+         an absolute px stop here (rather than a %, which only happens to
+         clear that same 40px on some widths) keeps both caps pure at any
+         width the button actually renders at. */
+      background:linear-gradient(135deg,#3ddc97 50px,#8b7bf5 calc(100% - 50px));
       box-shadow:0 0 10px 1px rgba(61,220,151,.18);
       color:#0e0e12;border-color:transparent;
     }
-    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 22%,#8b7bf5 78%);}
+    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 50px,#8b7bf5 calc(100% - 50px));}
     body.no-image .empty-state-actions .ghost{
       background:#1c1b23;border-color:transparent;color:#f5f4f8;
       box-shadow:0 0 10px 1px rgba(61,220,151,.18);
