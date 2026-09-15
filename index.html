@@ -302,6 +302,7 @@
   .switch input:checked + .switch-track{background:var(--accent);}
   .switch input:checked + .switch-track .switch-thumb{transform:translateX(20px);}
   #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;width:100%;height:auto;display:block;touch-action:none;}
+  .curve-points-readout{margin-top:6px;font-size:11px;font-family:ui-monospace,monospace;color:var(--text-dim);word-break:break-all;}
   footer{
     padding:8px 18px;border-top:1px solid var(--line);background:var(--panel);
     font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;flex-shrink:0;
@@ -678,6 +679,7 @@
       <summary>곡선</summary>
       <div class="group-body">
         <canvas id="curveCanvas" width="256" height="130"></canvas>
+        <div id="curvePointsReadout" class="curve-points-readout"></div>
         <div class="btnrow">
           <button id="resetCurveBtn" class="ghost">곡선 초기화</button>
         </div>
@@ -3478,6 +3480,14 @@
     for(const p of curvePoints){
       const [sx,sy]=curveToScreen(p);
       cctx.beginPath(); cctx.arc(sx,sy,4,0,Math.PI*2); cctx.fill();
+    }
+    // Plain numeric readout of the point coordinates — lets the user report
+    // back exactly what they set (e.g. to request a new default) without
+    // needing dev tools.
+    const readout = document.getElementById('curvePointsReadout');
+    if(readout){
+      const sorted = [...curvePoints].sort((a,b)=>a[0]-b[0]);
+      readout.textContent = '포인트: ' + sorted.map(p=>`(${Math.round(p[0])}, ${Math.round(p[1])})`).join(' → ');
     }
     return lut;
   }
