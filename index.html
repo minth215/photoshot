@@ -24,6 +24,11 @@
     --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
   }
+  @font-face{font-family:'Paperlogy';font-style:normal;font-display:swap;font-weight:400;src:url('fonts/Paperlogy-400.woff2') format('woff2');}
+  @font-face{font-family:'Paperlogy';font-style:normal;font-display:swap;font-weight:500;src:url('fonts/Paperlogy-500.woff2') format('woff2');}
+  @font-face{font-family:'Paperlogy';font-style:normal;font-display:swap;font-weight:600;src:url('fonts/Paperlogy-600.woff2') format('woff2');}
+  @font-face{font-family:'Paperlogy';font-style:normal;font-display:swap;font-weight:700;src:url('fonts/Paperlogy-700.woff2') format('woff2');}
+  @font-face{font-family:'Paperlogy';font-style:normal;font-display:swap;font-weight:800;src:url('fonts/Paperlogy-800.woff2') format('woff2');}
   *{box-sizing:border-box;}
   html,body{height:100%;margin:0;}
   body{
@@ -69,6 +74,13 @@
   body.editing-mode .menu-apply{display:inline-flex;}
   body.editing-mode .header-close{grid-column:3;display:flex;justify-content:flex-end;}
   body.crop-editing .header-crop-size{display:flex;}
+  /* 프로필 사진 자동화 모드: the square crop this forces has no escape hatch —
+     no 취소, no other ratio, no switching to a different menu — until 적용
+     commits a square result and the automatic pipeline takes over. */
+  body.forced-crop .menu-cancel{display:none!important;}
+  body.forced-crop #group-crop .ratio-btn:not([data-ratio="1:1"]){display:none;}
+  body.forced-crop #sideGroups > .group:not(#group-crop) > summary{pointer-events:none;opacity:.4;}
+  body.forced-crop .mobile-tabbar{display:none!important;}
   .toggle-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
   button{
     font-family:var(--sans);
@@ -166,6 +178,67 @@
   }
   .empty-state-actions .ghost{background:#000;border-color:#000;color:var(--text);}
   .empty-state-actions .ghost:hover{background:#1a1a1a;}
+  /* Decorative elements only used by the mobile first-page design below —
+     hidden here so the desktop empty state (above) is untouched. */
+  .empty-state-glow,.empty-state-logo,.empty-state-cat,.empty-state-spacer{display:none;}
+  .btn-icon{display:none;}
+
+  /* ---------- Mobile first-page design (design-file mockup) ---------- */
+  @media (max-width:860px){
+    body.no-image #stageWrap{align-items:stretch;justify-content:stretch;padding:0;}
+    body.no-image .empty-state{
+      width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
+      position:relative;overflow:hidden;padding:0 24px;
+      background:#0e0e12;color:#f5f4f8;
+    }
+    body.no-image .empty-state-glow{
+      display:block;position:absolute;top:-120px;left:50%;transform:translateX(-50%);
+      width:420px;height:420px;border-radius:50%;pointer-events:none;
+      background:radial-gradient(circle,rgba(61,220,151,.22),transparent 70%);
+    }
+    body.no-image .empty-state-logo{
+      display:block;padding-top:min(140px,15vh);text-align:center;position:relative;z-index:1;
+      font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
+      font-size:28px;font-weight:800;letter-spacing:-1px;color:#f5f4f8;
+    }
+    body.no-image .empty-state-logo span{color:#3ddc97;}
+    body.no-image .empty-state-spacer{display:block;flex:1;}
+    body.no-image .empty-state-bottom{width:100%;padding-bottom:56px;position:relative;z-index:1;}
+    body.no-image .empty-state-cat{
+      display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:12px;
+      cursor:pointer;transition:filter .15s;
+    }
+    body.no-image .empty-state-cat svg{transition:filter .15s;}
+    body.no-image .empty-state-cat.active svg{filter:drop-shadow(0 0 8px rgba(61,220,151,.85));}
+    @keyframes cat-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+    body.no-image .cat-eye{animation:cat-blink 4s infinite;}
+    body.no-image .cat-eye-l{transform-origin:23px 26px;}
+    body.no-image .cat-eye-r{transform-origin:41px 26px;}
+    body.no-image .profile-mode-label{
+      display:block;text-align:center;font-weight:300;font-size:12px;
+      color:rgba(245,244,248,.5);margin-bottom:10px;
+      font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
+    }
+    body.no-image .empty-state-actions button{
+      width:100%;min-width:0;height:56px;padding:0 24px;
+      font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
+      font-size:16px;font-weight:700;gap:8px;
+      display:flex;align-items:center;justify-content:center;
+    }
+    body.no-image .empty-state-actions button:active{transform:scale(.985);}
+    body.no-image .empty-state-actions .primary{
+      background:linear-gradient(135deg,#3ddc97,#8b7bf5);
+      box-shadow:0 0 14px 2px rgba(61,220,151,.4);
+      color:#0e0e12;border-color:transparent;
+    }
+    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97,#8b7bf5);}
+    body.no-image .empty-state-actions .ghost{
+      background:#1c1b23;border-color:transparent;color:#f5f4f8;
+      box-shadow:0 0 10px 1px rgba(61,220,151,.18);
+    }
+    body.no-image .empty-state-actions .ghost:hover{background:#26242f;}
+    body.no-image .btn-icon{display:inline-flex;align-items:center;}
+  }
   .url-import-form:not([hidden]){
     display:flex;flex-direction:column;gap:8px;margin-top:10px;
     width:260px;max-width:80vw;margin-left:auto;margin-right:auto;
@@ -427,17 +500,38 @@
 <div class="layout">
   <div class="stage-wrap" id="stageWrap">
     <div class="empty-state" id="emptyState">
-      <div class="empty-state-actions" id="emptyStateActions">
-        <button class="primary" type="button" onclick="document.getElementById('fileInput').click()">이미지 선택하기</button>
-        <button type="button" id="urlImportBtn" class="ghost">링크로 가져오기</button>
-      </div>
-      <div class="url-import-form" id="urlImportForm" hidden>
-        <input type="url" id="urlImportInput" placeholder="https://example.com/image.jpg" inputmode="url">
-        <div class="btnrow">
-          <button type="button" id="urlImportConfirm" class="primary">가져오기</button>
-          <button type="button" id="urlImportCancel" class="ghost">취소</button>
+      <div class="empty-state-glow"></div>
+      <div class="empty-state-logo">Photoshot<span>.</span></div>
+      <div class="empty-state-spacer"></div>
+      <div class="empty-state-bottom">
+        <div class="empty-state-cat" id="profileModeCat" role="button" tabindex="0" aria-label="프로필 사진 자동화 모드 전환" title="프로필 사진 자동화 모드">
+          <svg width="76" viewBox="0 0 64 34" aria-hidden="true">
+            <path d="M8 27 L11.3 10 Q11.5 5.5 16 7.8 L30 17 Z" fill="#f5f4f8"></path>
+            <path d="M56 27 L52.7 10 Q52.5 5.5 48 7.8 L34 17 Z" fill="#f5f4f8"></path>
+            <path d="M6 34 A26 22 0 0 1 58 34 Z" fill="#f5f4f8"></path>
+            <g class="cat-eye cat-eye-l"><circle cx="23" cy="26" r="6.5" fill="#4a9eff"></circle><circle cx="23.6" cy="26.6" r="4.6" fill="#0e0e12"></circle><circle cx="20.4" cy="23.6" r="1.9" fill="#fff"></circle></g>
+            <g class="cat-eye cat-eye-r"><circle cx="41" cy="26" r="6.5" fill="#ffd43b"></circle><circle cx="41.6" cy="26.6" r="4.6" fill="#0e0e12"></circle><circle cx="38.4" cy="23.6" r="1.9" fill="#fff"></circle></g>
+          </svg>
         </div>
-        <p class="hint" id="urlImportError" hidden></p>
+        <div class="profile-mode-label" id="profileModeLabel" hidden>프로필 사진 편집 자동화 ON</div>
+        <div class="empty-state-actions" id="emptyStateActions">
+          <button class="primary" type="button" onclick="document.getElementById('fileInput').click()">
+            <span class="btn-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="M21 15l-5-5-9 9"></path></svg></span>
+            이미지 선택하기
+          </button>
+          <button type="button" id="urlImportBtn" class="ghost">
+            <span class="btn-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5"></path><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.5-1.5"></path></svg></span>
+            링크로 가져오기
+          </button>
+        </div>
+        <div class="url-import-form" id="urlImportForm" hidden>
+          <input type="url" id="urlImportInput" placeholder="https://example.com/image.jpg" inputmode="url">
+          <div class="btnrow">
+            <button type="button" id="urlImportConfirm" class="primary">가져오기</button>
+            <button type="button" id="urlImportCancel" class="ghost">취소</button>
+          </div>
+          <p class="hint" id="urlImportError" hidden></p>
+        </div>
       </div>
     </div>
     <div class="canvas-holder" id="canvasHolder" style="display:none;">
@@ -1373,6 +1467,7 @@
     setTool('none');
     downloadBtn.disabled=false;
     closeBtn.disabled=false;
+    if(profileAutomationMode) startForcedSquareCrop();
   }
   fileInput.addEventListener('change', e=>{
     const file = e.target.files[0];
@@ -1445,6 +1540,24 @@
   urlImportConfirm.addEventListener('click', importImageFromUrl);
   urlImportInput.addEventListener('keydown', e=>{
     if(e.key==='Enter'){ e.preventDefault(); importImageFromUrl(); }
+  });
+
+  // ---------- 프로필 사진 자동화 모드 ----------
+  // Clicking the start-page cat toggles a mode that, on the next image import
+  // (file or URL), forces a square crop (no escape without one) and then
+  // auto-runs a fixed profile-photo pipeline. Purely a start-page toggle —
+  // it has no effect once an image is already loaded.
+  let profileAutomationMode = false;
+  const profileModeCat = document.getElementById('profileModeCat');
+  const profileModeLabel = document.getElementById('profileModeLabel');
+  function setProfileAutomationMode(on){
+    profileAutomationMode = on;
+    profileModeCat.classList.toggle('active', on);
+    profileModeLabel.hidden = !on;
+  }
+  profileModeCat.addEventListener('click', ()=> setProfileAutomationMode(!profileAutomationMode));
+  profileModeCat.addEventListener('keydown', e=>{
+    if(e.key==='Enter' || e.key===' '){ e.preventDefault(); setProfileAutomationMode(!profileAutomationMode); }
   });
 
   // ---------- Undo ----------
@@ -2693,6 +2806,79 @@
     cropAutoZoom = cropAutoZoomToggle.checked;
   });
 
+  // ---------- 프로필 사진 자동화: forced square crop + auto pipeline ----------
+  let forcedCropActive = false;
+  // Opens 크롭 already locked to 정사각형 with no other ratio, no 취소, and no
+  // switching to another menu (see the body.forced-crop rules) — 적용 is the
+  // only way out, and it can only ever produce a square result.
+  function startForcedSquareCrop(){
+    forcedCropActive = true;
+    document.body.classList.add('forced-crop');
+    enterMenu('group-crop');
+    const squareBtn = document.querySelector('#group-crop .ratio-btn[data-ratio="1:1"]');
+    if(squareBtn) squareBtn.click();
+    circleCropToggle.checked = true;
+    renderCircleCropMask();
+  }
+  function endForcedCropLock(){
+    forcedCropActive = false;
+    document.body.classList.remove('forced-crop');
+  }
+  // Applies the fixed 프로필 사진 자동화 pipeline to whatever was just square-
+  // cropped: resize, then blur/noise baked into the layer, then 선택색상/
+  // 레벨/곡선 as chained adjustment layers (배경-선택색상-레벨-곡선), ending
+  // with the layer panel open so that stack is immediately visible. Each step
+  // reuses the exact same begin/preview/apply functions the real menus use,
+  // just driven directly instead of through UI interaction.
+  function runProfileAutomationPipeline(){
+    previewResize(700,700);
+    commitEdit();
+
+    currentEffectName = 'blur';
+    blurRange.value = 2;
+    document.getElementById('blurVal').textContent = '2';
+    runEffectsPreview();
+    applyEffectsAction();
+
+    currentEffectName = 'noise';
+    noiseRange.value = 12;
+    document.getElementById('noiseVal').textContent = '12';
+    runEffectsPreview();
+    applyEffectsAction();
+
+    beginEdit();
+    beginAdjustmentSession('sc', '선택색상');
+    resetSCValues();
+    scValues.black.k = 100;
+    scCurrentRange = 'black';
+    scRangeSelect.value = 'black';
+    syncSCInputs();
+    runSCPreview();
+    applySCAction();
+    endAdjustmentSession();
+
+    beginEdit();
+    beginAdjustmentSession('levels', '레벨');
+    lvInB.value = 20; lvInW.value = 255; lvGamma.value = 130; lvOutB.value = 0; lvOutW.value = 255;
+    document.getElementById('lvInBVal').textContent = '20';
+    document.getElementById('lvInWVal').textContent = '255';
+    document.getElementById('lvGammaVal').textContent = '1.30';
+    document.getElementById('lvOutBVal').textContent = '0';
+    document.getElementById('lvOutWVal').textContent = '255';
+    runLevelsPreview();
+    applyLevelsAction();
+    endAdjustmentSession();
+
+    beginEdit();
+    beginAdjustmentSession('curve', '곡선');
+    curvePoints = [[0,0],[65,79],[177,194],[255,255]];
+    runCurvePreview();
+    applyCurveAction();
+    endAdjustmentSession();
+
+    if(layerPanel.classList.contains('collapsed')) toggleLayerPanel();
+  }
+
   // A single-finger drag resizes a handle (frame stays centered, growing/shrinking
   // symmetrically about its own center) or, anywhere else on the crop-frame
   // backdrop, pans the image. A second finger landing anywhere hands off to the
@@ -3680,13 +3866,19 @@
   function applyActiveMenu(){
     if(!activeMenuId) return;
     endPeek(); // never commit/close while the canvas is showing the "before" peek
+    const wasForcedSquareCrop = forcedCropActive && activeMenuId==='group-crop';
     const session = MENU_SESSION[activeMenuId];
     if(session) session.commit();
     onMenuClose(activeMenuId);
     closeMenuUI();
+    if(wasForcedSquareCrop){
+      endForcedCropLock();
+      runProfileAutomationPipeline();
+    }
   }
   function cancelActiveMenu(confirmFirst){
     if(!activeMenuId) return;
+    if(forcedCropActive) return; // no escape without a square crop — see startForcedSquareCrop
     endPeek();
     // Skip the confirm entirely when nothing was actually changed in this
     // session — there's nothing to lose, so asking would just be noise.
