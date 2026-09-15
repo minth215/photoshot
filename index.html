@@ -205,7 +205,12 @@
     display:grid;grid-template-columns:28px 1fr auto auto;grid-template-rows:auto auto auto;
     align-items:center;column-gap:8px;row-gap:4px;
     padding:6px 8px;border-radius:6px;border:1px solid transparent;
-    background:var(--panel-2);touch-action:none;
+    background:var(--panel-2);
+    /* pan-y (not none) lets the browser still scroll the layer list natively
+       on touch — the press-and-hold reorder drag only engages after a delay
+       and captures the pointer itself at that point, so it doesn't need to
+       claim the touch gesture upfront the way none would. */
+    touch-action:pan-y;
   }
   .layer-row.selected{border-color:var(--accent);background:rgba(79,209,197,.1);}
   .layer-row.dragging{opacity:.55;}
@@ -1674,11 +1679,16 @@
   // the user asked for, so backing out via 취소 without touching anything
   // else stays a silent no-op instead of prompting a confirm.
   function applyDefaultFeather(){
-    ensureMaskInitialized();
     featherToggle.checked = true;
     featherWrap.style.display = '';
     featherRange.value = 20;
     document.getElementById('featherVal').textContent = '20';
+    // Nothing to feather yet on a blank slate — and initializing the mask
+    // here would wrongly pre-select the whole canvas, which then makes a
+    // fresh lasso/brush selection a no-op (it can only ADD to the existing
+    // mask, never replace it). Only pre-feather when a selection already
+    // exists to soften (e.g. re-opening the menu on one made earlier).
+    if(!hasSelection) return;
     featherOnMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
     const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, 20);
     mctx.putImageData(blurred,0,0);
