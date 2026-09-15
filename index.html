@@ -191,8 +191,7 @@
      tab's own spot instead of leaving it empty above — the bookmark itself
      hides via JS at the same time (see toggleLayerPanel). */
   .layer-panel:not(.collapsed):not(.docked){top:14px;}
-  .layer-panel-header{padding:9px 8px 9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
-  .layer-panel-header span:first-child{cursor:pointer;}
+  .layer-panel-header{padding:9px 8px 9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
   .layer-add-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-add-btn:hover{color:var(--accent);background:rgba(79,209,197,.12);}
   .layer-add-btn svg{width:17px;height:17px;}
@@ -206,11 +205,11 @@
     align-items:center;column-gap:8px;row-gap:4px;
     padding:6px 8px;border-radius:6px;border:1px solid transparent;
     background:var(--panel-2);
-    /* pan-y (not none) lets the browser still scroll the layer list natively
-       on touch — the press-and-hold reorder drag only engages after a delay
-       and captures the pointer itself at that point, so it doesn't need to
-       claim the touch gesture upfront the way none would. */
-    touch-action:pan-y;
+    /* none, not pan-y: the hold-to-drag gesture (attachLayerDrag) needs full
+       control of the touch from the very start, or a native pan-y here would
+       race its hold timer for who owns the gesture. A quick swipe before the
+       hold fires is scrolled manually in JS instead (see attachLayerDrag). */
+    touch-action:none;
   }
   .layer-row.selected{border-color:var(--accent);background:rgba(79,209,197,.1);}
   .layer-row.dragging{opacity:.55;}
@@ -805,7 +804,6 @@
   const headerCropSize = document.getElementById('headerCropSize');
   const layerToggleBtn = document.getElementById('layerToggleBtn');
   const layerPanel = document.getElementById('layerPanel');
-  const layerPanelHeaderLabel = document.getElementById('layerPanelHeaderLabel');
   const layerList = document.getElementById('layerList');
 
   // ---------- Desktop layout: layer panel docked in the sidebar ----------
@@ -1002,10 +1000,12 @@
   // reorders layers by z-index as the row crosses its neighbors.
   function attachLayerDrag(row, layer){
     const HOLD_MS = 260, MOVE_CANCEL_PX = 8;
-    let holdTimer = null, dragging = false, startY = 0, preDragSnapshot = null;
+    let holdTimer = null, dragging = false, startY = 0, lastY = 0, scrolling = false, preDragSnapshot = null;
     function onDown(e){
       if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
       startY = e.clientY;
+      lastY = e.clientY;
+      scrolling = false;
       holdTimer = setTimeout(()=>{
         holdTimer = null;
         dragging = true;
@@ -1034,12 +1034,22 @@
         }
         return;
       }
-      if(holdTimer && Math.abs(e.clientY-startY) > MOVE_CANCEL_PX){
+      // The row needs touch-action:none for the hold-to-drag gesture below to
+      // have full control from the very start of a touch (a native pan-y here
+      // would race the hold timer for who owns the gesture) — which means a
+      // quick swipe before the hold fires has to scroll the list manually,
+      // since the browser's own touch scrolling is disabled for this element.
+      const dy = e.clientY - lastY;
+      lastY = e.clientY;
+      if(!scrolling && holdTimer && Math.abs(e.clientY-startY) > MOVE_CANCEL_PX){
         clearTimeout(holdTimer); holdTimer=null;
+        scrolling = true;
       }
+      if(scrolling) layerList.scrollTop -= dy;
     }
     function onUp(e){
       if(holdTimer){ clearTimeout(holdTimer); holdTimer=null; }
+      scrolling = false;
       if(dragging){
         dragging = false;
         if(preDragSnapshot) pushUndo(preDragSnapshot);
@@ -1164,8 +1174,12 @@
   layerToggleBtn.addEventListener('click', toggleLayerPanel);
   // On mobile the bookmark tab hides while the panel is open (see the
   // .layer-tab-btn CSS rule) — the panel grows up into the space it left
-  // behind, and its own "레이어" label becomes the way to collapse it again.
-  layerPanelHeaderLabel.addEventListener('click', toggleLayerPanel);
+  // behind, and clicking anywhere on its header row (except the + button)
+  // becomes the way to collapse it again.
+  document.querySelector('.layer-panel-header').addEventListener('click', e=>{
+    if(e.target.closest('#addLayerBtn')) return;
+    toggleLayerPanel();
+  });
   const addLayerBtn = document.getElementById('addLayerBtn');
   addLayerBtn.addEventListener('click', ()=>{
     if(!mainCanvas.width || !mainCanvas.height) return;
@@ -1673,6 +1687,18 @@
     featherWrap.style.display = 'none';
     featherOnMask = null;
   }
+  // Re-blurs whatever the mask currently is, at the feather panel's current
+  // radius — called after every action that actually changes the selection
+  // (a lasso completing, a brush stroke ending) so a feather that's already
+  // on stays applied to the new shape, instead of only taking effect the
+  // next time the toggle itself is flipped.
+  function reapplyFeatherIfOn(){
+    if(!featherToggle.checked) return;
+    featherOnMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
+    const r = parseInt(featherRange.value,10);
+    const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, r);
+    mctx.putImageData(blurred,0,0);
+  }
   // 영역 선택 opens with feather ON by default — mirrors exactly what
   // checking the box does, applied to whatever the current selection already
   // is. Doesn't mark the session dirty: it's a passive default, not something
@@ -2144,12 +2170,15 @@
       mctx.restore();
       hasSelection = true;
       lassoPoints = [];
+      reapplyFeatherIfOn();
       renderSelectionOverlay();
     } else if(currentTool==='lasso'){
       lassoPoints=[];
     }
     if(currentTool==='brush-add'||currentTool==='brush-sub'){
       brushDrawing=false;
+      reapplyFeatherIfOn();
+      renderSelectionOverlay();
     }
     if(currentTool==='draw'){
       drawingActive=false;
