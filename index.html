@@ -208,6 +208,14 @@
       display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:0;
       cursor:pointer;position:relative;z-index:2;
     }
+    /* Some browsers leave a stale composited glow behind (and render it
+       clipped to a box on the next toggle) when a filter is added/removed
+       outright. Keeping the same drop-shadow() always applied and only
+       animating its alpha avoids ever adding/removing the filter itself. */
+    body.no-image .empty-state-cat svg{
+      filter:drop-shadow(0 0 10px rgba(61,220,151,0));
+      transition:filter .15s;
+    }
     body.no-image .empty-state-cat.active svg{filter:drop-shadow(0 0 10px rgba(61,220,151,.5));}
     @keyframes cat-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
     body.no-image .cat-eye{animation:cat-blink 4s infinite;}
