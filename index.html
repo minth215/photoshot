@@ -227,29 +227,23 @@
     }
     body.no-image .empty-state-actions button:active{transform:scale(.985);}
     body.no-image .empty-state-actions .primary{
-      /* A plain 2-stop diagonal gradient on a short, wide pill puts the top-right
-         and bottom-left corners well short of the pure end colors (they land
-         partway along the diagonal), which reads as a stray purple/mint fringe
-         right at the rounded caps. Holding each end color flat for a stretch
-         before the diagonal transition starts keeps the diagonal look while
-         both caps stay a single solid color all the way around their curve.
-         The needed flat-zone length is exactly height/√2 (≈40px at this
-         button's fixed 56px height) regardless of the button's width — using
-         an absolute px stop here (rather than a %, which only happens to
-         clear that same 40px on some widths) keeps both caps pure at any
-         width the button actually renders at. */
-      background:linear-gradient(135deg,#3ddc97 50px,#8b7bf5 calc(100% - 50px));
-      /* A single flat mint glow surrounds this whole pill uniformly,
-         including its purple half — right next to the purple end that
-         reads as a mint tinge that doesn't belong there. Splitting it into
-         two shadows, one nudged toward each end and tinted to that end's
-         own fill color, keeps the glow's color consistent with what it's
-         actually glowing off of, while matching 링크로 가져오기's glow in
-         blur/spread/opacity. */
-      box-shadow:-4px 0 10px 1px rgba(61,220,151,.22),4px 0 10px 1px rgba(139,123,245,.22);
+      /* A plain 2-stop diagonal gradient's color at any point is set by
+         projecting that point onto the gradient's own axis — for 135deg,
+         the single worst point on the left (mint) cap's curve is where it
+         meets the BOTTOM edge (not the tangent point straight out to the
+         left, and not the top edge either), and symmetrically for the
+         right (purple) cap it's where its curve meets the TOP edge. Each
+         needs the flat zone to reach exactly (3/(2√2))×height ≈ 59.4px in
+         from its end (independent of the button's width — verified
+         numerically against the actual stadium-curve boundary, not just
+         the bounding-box corners) before the diagonal transition can
+         start, or that one point keeps reading as a stray tinge of the
+         other end's color. */
+      background:linear-gradient(135deg,#3ddc97 65px,#8b7bf5 calc(100% - 65px));
+      box-shadow:0 0 10px 1px rgba(61,220,151,.18);
       color:#0e0e12;border-color:transparent;
     }
-    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 50px,#8b7bf5 calc(100% - 50px));}
+    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 65px,#8b7bf5 calc(100% - 65px));}
     body.no-image .empty-state-actions .ghost{
       background:#1c1b23;border-color:transparent;color:#f5f4f8;
       box-shadow:0 0 10px 1px rgba(61,220,151,.18);
