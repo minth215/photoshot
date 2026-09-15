@@ -218,14 +218,16 @@
       width:100%;padding-bottom:min(56px,calc(var(--app-height,800px)*.05));
       position:relative;z-index:1;
     }
-    /* Shares a row with the "<" back button (hidden outside the URL-import
-       form) so the cat sits on the same line as it once the form opens,
-       instead of stacking above the input like before. */
+    /* Positioning context for the "<" back button and the automation-mode
+       label, both placed with position:absolute below the cat (see their
+       own rules) rather than sharing flex layout with it — that way
+       neither one can shift the cat's own position (X or Y) depending on
+       whether the URL-import form is open. */
     body.no-image .empty-state-cat-row{
-      display:flex;align-items:center;width:100%;position:relative;
+      position:relative;width:100%;
     }
     body.no-image .empty-state-cat{
-      display:flex;flex:1;justify-content:flex-end;padding-right:26px;margin-bottom:0;
+      display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:0;
       cursor:pointer;position:relative;z-index:2;
     }
     /* Some browsers leave a stale composited glow behind (and render it
@@ -307,13 +309,17 @@
       width:100%;max-width:none;margin:0;
       display:flex;flex-direction:column;gap:10px;
     }
-    /* Plain text button (no pill background, no glow) that lives in the
-       cat row rather than the form itself, so it sits on the same line
-       as the cat once the URL-import form opens. */
+    /* Plain text button (no pill background, no glow), lowered to the same
+       line as .profile-mode-label and pinned to the row's own left edge —
+       position:absolute takes it out of flex/normal flow entirely so it
+       can never affect the cat's own position above it. */
     body.no-image .url-import-back{
-      width:auto;height:32px;padding:0 6px 0 0;border-radius:0;border:none;flex-shrink:0;
-      display:flex;align-items:center;justify-content:center;
-      background:none;box-shadow:none;color:#f5f4f8;
+      position:absolute;left:0;bottom:5px;z-index:3;
+      width:auto;height:auto;padding:0;border-radius:0;border:none;
+      display:flex;align-items:center;justify-content:flex-start;
+      background:none;box-shadow:none;color:rgba(245,244,248,.7);
+      font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
+      font-size:13px;font-weight:600;
     }
     /* Our own display:flex above outranks the browser's default
        [hidden]{display:none} (equal specificity, but ours comes later) —
@@ -350,14 +356,19 @@
      so this row's only visible content is the "<" back button when the
      URL-import form is open — sized/centered to match the form's own
      260px column and scoped with :has() so it takes up no space at all
-     while the button is hidden (form closed). */
-  .empty-state-cat-row:has(#urlImportBack:not([hidden])){
-    display:flex;align-items:center;width:260px;max-width:80vw;margin:10px auto 0;
+     while the button is hidden (form closed). Explicitly gated to the
+     desktop breakpoint (an ID inside :has() gives this enough specificity
+     to otherwise leak into the mobile layout's own rules above). */
+  @media (min-width:861px){
+    .empty-state-cat-row:has(#urlImportBack:not([hidden])){
+      display:flex;align-items:center;width:260px;max-width:80vw;margin:10px auto 0;
+    }
   }
   .url-import-back{
-    width:28px;height:28px;border-radius:50%;padding:0;flex-shrink:0;
+    width:auto;height:auto;padding:0;border:none;flex-shrink:0;
     align-self:flex-start;
-    display:flex;align-items:center;justify-content:center;
+    background:none;box-shadow:none;color:var(--text-dim);font-size:13px;
+    display:flex;align-items:center;justify-content:flex-start;
   }
   .url-import-back[hidden]{display:none;}
   .url-import-input-wrap{position:relative;}
@@ -371,7 +382,7 @@
     display:flex;align-items:center;justify-content:center;
     background:var(--accent);border-color:var(--accent);color:#0b1615;
   }
-  #urlImportError{color:var(--danger);text-align:left;margin:0;}
+  #urlImportError{color:#ff6b6b;text-align:left;margin:0;}
 
   /* ---------- Layers (bookmark tab + flyout panel) ---------- */
   .layer-tab-btn{
@@ -628,9 +639,7 @@
       <div class="empty-state-spacer"></div>
       <div class="empty-state-bottom">
         <div class="empty-state-cat-row" id="emptyStateCatRow">
-          <button type="button" id="urlImportBack" class="url-import-back" hidden aria-label="취소">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
-          </button>
+          <button type="button" id="urlImportBack" class="url-import-back" hidden aria-label="뒤로">&lt; 뒤로</button>
           <div class="empty-state-cat" id="profileModeCat" role="button" tabindex="0" aria-label="프로필 사진 자동화 모드 전환" title="프로필 사진 자동화 모드">
             <svg width="76" viewBox="0 0 64 34" aria-hidden="true">
               <path d="M8 27 L11.3 10 Q11.5 5.5 16 7.8 L30 17 Z" fill="#f5f4f8"></path>
