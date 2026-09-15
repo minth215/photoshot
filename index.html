@@ -239,7 +239,14 @@
          clear that same 40px on some widths) keeps both caps pure at any
          width the button actually renders at. */
       background:linear-gradient(135deg,#3ddc97 50px,#8b7bf5 calc(100% - 50px));
-      box-shadow:0 0 10px 1px rgba(61,220,151,.18);
+      /* A single flat mint glow surrounds this whole pill uniformly,
+         including its purple half — right next to the purple end that
+         reads as a mint tinge that doesn't belong there. Splitting it into
+         two shadows, one nudged toward each end and tinted to that end's
+         own fill color, keeps the glow's color consistent with what it's
+         actually glowing off of, while matching 링크로 가져오기's glow in
+         blur/spread/opacity. */
+      box-shadow:-4px 0 10px 1px rgba(61,220,151,.22),4px 0 10px 1px rgba(139,123,245,.22);
       color:#0e0e12;border-color:transparent;
     }
     body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97 50px,#8b7bf5 calc(100% - 50px));}
