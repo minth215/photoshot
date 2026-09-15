@@ -152,11 +152,20 @@
   .crop-handle.w{left:-11px;top:50%;width:22px;height:40px;margin-top:-20px;cursor:ew-resize;}
   .crop-handle.n::after,.crop-handle.s::after{content:'';position:absolute;left:50%;top:50%;width:24px;height:4px;margin-left:-12px;margin-top:-2px;background:#fff;border-radius:2px;}
   .crop-handle.e::after,.crop-handle.w::after{content:'';position:absolute;left:50%;top:50%;width:4px;height:24px;margin-left:-2px;margin-top:-12px;background:#fff;border-radius:2px;}
+  /* No image loaded yet — the header/footer chrome has nothing to act on,
+     so it's hidden entirely rather than showing a row of disabled buttons. */
+  body.no-image header,
+  body.no-image footer{display:none;}
   .empty-state{
     color:var(--text-dim);text-align:center;font-size:14px;line-height:1.7;
   }
-  .empty-state button{margin-top:10px;}
-  .empty-state-actions:not([hidden]){display:flex;flex-direction:column;align-items:center;}
+  .empty-state-actions:not([hidden]){display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .empty-state-actions button{
+    min-width:240px;padding:18px 32px;font-size:17px;font-weight:600;
+    border-radius:999px;
+  }
+  .empty-state-actions .ghost{background:#000;border-color:#000;color:var(--text);}
+  .empty-state-actions .ghost:hover{background:#1a1a1a;}
   .url-import-form:not([hidden]){
     display:flex;flex-direction:column;gap:8px;margin-top:10px;
     width:260px;max-width:80vw;margin-left:auto;margin-right:auto;
@@ -379,7 +388,7 @@
   }
 </style>
 </head>
-<body>
+<body class="no-image">
 
 <header>
   <input type="file" id="fileInput" accept="image/*">
@@ -417,7 +426,6 @@
 <div class="layout">
   <div class="stage-wrap" id="stageWrap">
     <div class="empty-state" id="emptyState">
-      이미지를 업로드하면 편집을 시작할 수 있어요<br>
       <div class="empty-state-actions" id="emptyStateActions">
         <button class="primary" type="button" onclick="document.getElementById('fileInput').click()">이미지 선택하기</button>
         <button type="button" id="urlImportBtn" class="ghost">링크로 가져오기</button>
@@ -780,7 +788,6 @@
 
 <footer>
   <span id="dimsInfo">이미지 없음</span>
-  <span>모든 처리는 브라우저 안에서만 이루어져요</span>
 </footer>
 
 <script>
@@ -1351,6 +1358,7 @@
     hasSelection = false;
     undoStack = [];
     redoStack = [];
+    document.body.classList.remove('no-image');
     emptyState.style.display='none';
     canvasHolder.style.display='block';
     sidePanel.style.display='block';
@@ -1500,6 +1508,7 @@
 
   // ---------- Close / discard ----------
   function resetToEmptyState(){
+    document.body.classList.add('no-image');
     canvasHolder.style.display='none';
     sidePanel.style.display='none';
     emptyState.style.display='';
