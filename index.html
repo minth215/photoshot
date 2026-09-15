@@ -205,8 +205,8 @@
     body.no-image .empty-state-spacer{display:block;flex:1;}
     body.no-image .empty-state-bottom{width:100%;padding-bottom:56px;position:relative;z-index:1;}
     body.no-image .empty-state-cat{
-      display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:12px;
-      cursor:pointer;
+      display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:0;
+      cursor:pointer;position:relative;z-index:2;
     }
     @keyframes cat-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
     body.no-image .cat-eye{animation:cat-blink 4s infinite;}
@@ -227,11 +227,11 @@
     }
     body.no-image .empty-state-actions button:active{transform:scale(.985);}
     body.no-image .empty-state-actions .primary{
-      background:linear-gradient(135deg,#3ddc97,#8b7bf5);
-      box-shadow:0 0 14px 2px rgba(61,220,151,.4);
+      background:linear-gradient(90deg,#3ddc97,#8b7bf5);
+      box-shadow:0 0 10px 1px rgba(61,220,151,.18);
       color:#0e0e12;border-color:transparent;
     }
-    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(135deg,#3ddc97,#8b7bf5);}
+    body.no-image .empty-state-actions .primary:hover{background:linear-gradient(90deg,#3ddc97,#8b7bf5);}
     body.no-image .empty-state-actions .ghost{
       background:#1c1b23;border-color:transparent;color:#f5f4f8;
       box-shadow:0 0 10px 1px rgba(61,220,151,.18);
@@ -1073,6 +1073,83 @@
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   }
+  // Pure per-pixel effect, driven entirely by a layer's own stored
+  // adjustmentParams rather than the live editing-session globals — lets
+  // rebuildDependentAdjustmentLayers() re-derive a layer's pixels from
+  // whatever's now below it without disturbing any menu that's actually open.
+  function computeAdjustmentEffect(type, params, data){
+    if(type==='sc'){
+      const values = params.scValues;
+      for(let i=0;i<data.length;i+=4){
+        const r=data[i], g=data[i+1], b=data[i+2];
+        const [c,m,y,k] = scAggregate(r,g,b,values);
+        let R = scAdjustChannel(r, c/100);
+        let G = scAdjustChannel(g, m/100);
+        let B = scAdjustChannel(b, y/100);
+        const dk = k/100;
+        if(dk>=0){ R*=(1-dk); G*=(1-dk); B*=(1-dk); }
+        else { R += (255-R)*(-dk); G += (255-G)*(-dk); B += (255-B)*(-dk); }
+        data[i]=R; data[i+1]=G; data[i+2]=B;
+      }
+      return data;
+    }
+    if(type==='levels'){
+      const gamma = params.gamma/100;
+      const lut = new Uint8ClampedArray(256);
+      for(let v=0;v<256;v++){
+        let x = (v-params.inB)/Math.max(1,(params.inW-params.inB));
+        x = Math.min(1,Math.max(0,x));
+        x = Math.pow(x, 1/gamma);
+        lut[v] = params.outB + x*(params.outW-params.outB);
+      }
+      for(let i=0;i<data.length;i+=4){
+        data[i]=lut[data[i]]; data[i+1]=lut[data[i+1]]; data[i+2]=lut[data[i+2]];
+      }
+      return data;
+    }
+    if(type==='curve'){
+      const lut = buildLUT(params.points);
+      for(let i=0;i<data.length;i+=4){
+        data[i]=lut[data[i]]; data[i+1]=lut[data[i+1]]; data[i+2]=lut[data[i+2]];
+      }
+      return data;
+    }
+    return data;
+  }
+  // Whenever a layer's visibility changes, every 선택색상/레벨/곡선 layer
+  // stacked above it needs its baked pixels re-derived from whatever is now
+  // actually showing underneath — otherwise (a) turning off a background
+  // layer leaves the adjustment layers above it showing their old frozen
+  // result instead of disappearing with it, and (b) turning off a middle
+  // adjustment layer has no visible effect, since the ones above it were
+  // baked from its output and never re-rendered. Layers created against a
+  // selection (adjustmentMaskThumb set) are left as-is: only their small UI
+  // thumbnail mask is kept, not the full-resolution mask needed to redo the
+  // partial blend, so they keep their original frozen pixels.
+  function rebuildDependentAdjustmentLayers(fromIndex){
+    const w = mainCanvas.width, h = mainCanvas.height;
+    if(!w || !h) return;
+    for(let i=fromIndex+1;i<layers.length;i++){
+      const l = layers[i];
+      if(!l.adjustmentType || !l.adjustmentParams || l.adjustmentMaskThumb) continue;
+      ctx.clearRect(0,0,w,h);
+      for(let j=0;j<i;j++){
+        const bl = layers[j];
+        if(!bl.visible) continue;
+        const manualBlend = bl.blendMode && MANUAL_BLEND_MODES[bl.blendMode];
+        if(manualBlend){ compositeManualBlend(manualBlend, bl.canvas, bl.opacity); continue; }
+        ctx.globalAlpha = bl.opacity;
+        ctx.globalCompositeOperation = (bl.blendMode && bl.blendMode!=='normal') ? bl.blendMode : 'source-over';
+        ctx.drawImage(bl.canvas,0,0);
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      const baseData = ctx.getImageData(0,0,w,h);
+      const effectData = computeAdjustmentEffect(l.adjustmentType, l.adjustmentParams, baseData.data);
+      l.ctx.clearRect(0,0,w,h);
+      l.ctx.putImageData(new ImageData(effectData,w,h),0,0);
+    }
+  }
   function selectLayer(id){
     if(id===activeLayerId) return;
     activeLayerId = id;
@@ -1236,6 +1313,7 @@
         e.stopPropagation();
         pushUndo(snapshotState());
         layer.visible = !layer.visible;
+        rebuildDependentAdjustmentLayers(layers.indexOf(layer));
         compositeLayers();
         renderLayerPanel();
       });
@@ -2511,10 +2589,11 @@
     newLayer.adjustmentMaskThumb = captureAdjustmentMaskThumb();
     const idx = layers.indexOf(source);
     layers.splice(idx+1, 0, newLayer);
-    // Hides the layer this one was sourced from — since the new layer is a
-    // full replacement of that layer's pixels, keeping both visible would
-    // double-composite it.
-    source.visible = false;
+    // The source layer stays visible — since the new layer is a full
+    // replacement of its pixels, this never changes what's actually shown
+    // (the new layer fully covers it), but it keeps every layer's eye icon
+    // correctly reflecting "on" and lets rebuildDependentAdjustmentLayers()
+    // correctly reveal it if a layer above is later turned off.
     previewSourceLayerId = source.id;
     previewTargetLayerId = newLayer.id;
     compositeLayers();
@@ -2557,18 +2636,23 @@
   const PEEK_MENUS = new Set(['group-effects','group-sc','group-levels','group-curve']);
   let isPeeking = false;
   let peekAfterImage = null;
+  let peekPrevTargetVisible = true, peekPrevSourceVisible = true;
   function canPeek(){
     return currentTool==='none' && PEEK_MENUS.has(activeMenuId) && !!editingSnapshot && sessionDirty;
   }
   function startPeek(){
     if(isPeeking || !canPeek()) return;
     if(previewTargetLayerId!=null){
-      // Adjustment-layer session: "before" is simply the (hidden) source
-      // layer, so peek just swaps which of the pair is visible.
+      // Adjustment-layer session: "before" is simply the source layer, so
+      // peek just swaps which of the pair is visible — remembering each
+      // one's actual prior state (rather than assuming target-on/source-off)
+      // so releasing restores exactly what was showing before the peek.
       const target = layers.find(l=>l.id===previewTargetLayerId);
       const source = layers.find(l=>l.id===previewSourceLayerId);
       if(!target || !source) return;
       isPeeking = true;
+      peekPrevTargetVisible = target.visible;
+      peekPrevSourceVisible = source.visible;
       target.visible = false; source.visible = true;
       compositeLayers();
       return;
@@ -2587,8 +2671,8 @@
     if(previewTargetLayerId!=null){
       const target = layers.find(l=>l.id===previewTargetLayerId);
       const source = layers.find(l=>l.id===previewSourceLayerId);
-      if(target) target.visible = true;
-      if(source) source.visible = false;
+      if(target) target.visible = peekPrevTargetVisible;
+      if(source) source.visible = peekPrevSourceVisible;
       compositeLayers();
       return;
     }
@@ -3428,13 +3512,14 @@
     w.neutral = Math.max(0, 1 - Math.abs(L-0.5)*2) * (1-sat);
     return w;
   }
-  function scAggregate(r,g,b){
+  function scAggregate(r,g,b,valuesOverride){
+    const values = valuesOverride || scValues;
     const w = scWeights(r,g,b);
     let c=0,m=0,y=0,k=0;
     for(const range of SC_RANGES){
       const wt = w[range];
       if(!wt) continue;
-      const v = scValues[range];
+      const v = values[range];
       c += wt*v.c; m += wt*v.m; y += wt*v.y; k += wt*v.k;
     }
     return [
@@ -3583,8 +3668,8 @@
     return [ (e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY ];
   }
 
-  function buildLUT(){
-    const pts = [...curvePoints].sort((a,b)=>a[0]-b[0]);
+  function buildLUT(pointsOverride){
+    const pts = [...(pointsOverride||curvePoints)].sort((a,b)=>a[0]-b[0]);
     const lut = new Uint8ClampedArray(256);
     // With only the two default endpoints, stay a straight line (no curvature)
     // until the user actually adds a third point to bend it.
