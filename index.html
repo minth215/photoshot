@@ -125,13 +125,26 @@
     padding:24px;overflow:hidden;position:relative;
     background:#101214;
   }
-  /* Sized by JS to exactly match the visible canvas (a flex item with no
-     explicit width/height shrinks to its content), so this checkerboard
-     only ever shows through actual transparent PIXELS of the image itself
-     (e.g. after 배경 제거) — never the stage's own margin around it, which
-     stays the plain ink-black set above. */
+  /* Outside crop mode this box shrink-wraps to exactly the visible canvas
+     (a flex item with no explicit width/height sizes to its content), so
+     its own background is only ever seen through the gap around a
+     rounded corner or shadow — never a real visible area. In crop mode,
+     though, JS explicitly enlarges it to the fixed crop viewport so the
+     image can be panned/zoomed inside it, and that extra space around the
+     (possibly smaller/offset) image needs an actual background: plain
+     ink-black, matching the stage margin, NOT a checkerboard — the
+     checkerboard itself lives on #mainCanvas below so it only ever
+     tracks the image's own bounds, not this outer viewport. */
   .canvas-holder{
     position:relative;box-shadow:0 8px 30px rgba(0,0,0,.5);
+    background-color:#101214;
+  }
+  .canvas-holder canvas:not([hidden]){display:block;}
+  /* Sized to exactly match the image (this is what pans/zooms during
+     crop), so this checkerboard shows through only actual transparent
+     PIXELS of the image itself (e.g. after 배경 제거), and moves/scales
+     together with the image rather than staying fixed to the viewport. */
+  #mainCanvas{
     background-image:
       linear-gradient(45deg,#ccc 25%,transparent 25%),
       linear-gradient(-45deg,#ccc 25%,transparent 25%),
@@ -141,7 +154,6 @@
     background-position:0 0,0 8px,8px -8px,-8px 0px;
     background-color:#fff;
   }
-  .canvas-holder canvas:not([hidden]){display:block;}
   #overlayCanvas{position:absolute;top:0;left:0;touch-action:none;}
   .canvas-holder.crop-mode{overflow:hidden;}
   .canvas-holder.crop-mode #mainCanvas{position:absolute;}
@@ -436,7 +448,7 @@
   }
   .layer-row.selected{border-color:var(--accent);background:rgba(79,209,197,.1);}
   .layer-row.dragging{opacity:.55;}
-  /* Same transparency checkerboard as .canvas-holder, scaled down — shows
+  /* Same transparency checkerboard as #mainCanvas, scaled down — shows
      through wherever the thumbnail canvas itself is left unpainted (see
      renderLayerPanel's non-adjustment branch, which no longer fills black
      before drawing the layer). */
