@@ -520,6 +520,12 @@
   .switch input:checked + .switch-track .switch-thumb{transform:translateX(20px);}
   #curveCanvas{background:#101214;border:1px solid var(--line);border-radius:6px;cursor:crosshair;width:100%;height:auto;display:block;touch-action:none;}
   .curve-points-readout{margin-top:6px;font-size:11px;font-family:ui-monospace,monospace;color:var(--text-dim);word-break:break-all;}
+  #levelsInputCanvas,#levelsOutputCanvas{
+    background:#101214;border:1px solid var(--line);border-radius:6px;
+    width:100%;height:auto;display:block;touch-action:none;cursor:default;
+  }
+  .levels-io-row{display:flex;gap:8px;}
+  .levels-io-row input[type=number]{flex:1;text-align:center;}
   footer{
     padding:8px 18px;border-top:1px solid var(--line);background:var(--panel);
     font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;flex-shrink:0;
@@ -906,16 +912,19 @@
     <details class="group collapsed" id="group-levels" open>
       <summary>레벨</summary>
       <div class="group-body">
-        <label class="field"><span class="row"><span>입력 최소값</span><span id="lvInBVal">0</span></span>
-          <input type="range" id="lvInB" min="0" max="254" value="0"></label>
-        <label class="field"><span class="row"><span>감마</span><span id="lvGammaVal">1.00</span></span>
-          <input type="range" id="lvGamma" min="10" max="300" value="100"></label>
-        <label class="field"><span class="row"><span>입력 최대값</span><span id="lvInWVal">255</span></span>
-          <input type="range" id="lvInW" min="1" max="255" value="255"></label>
-        <label class="field"><span class="row"><span>출력 최소값</span><span id="lvOutBVal">0</span></span>
-          <input type="range" id="lvOutB" min="0" max="254" value="0"></label>
-        <label class="field"><span class="row"><span>출력 최대값</span><span id="lvOutWVal">255</span></span>
-          <input type="range" id="lvOutW" min="1" max="255" value="255"></label>
+        <span class="row"><span>입력 레벨</span></span>
+        <canvas id="levelsInputCanvas" width="256" height="140"></canvas>
+        <div class="levels-io-row">
+          <input type="number" id="lvInB" min="0" max="254" value="0">
+          <input type="number" id="lvGamma" min="0.1" max="9.99" step="0.01" value="1.00">
+          <input type="number" id="lvInW" min="1" max="255" value="255">
+        </div>
+        <span class="row"><span>출력 레벨</span></span>
+        <canvas id="levelsOutputCanvas" width="256" height="34"></canvas>
+        <div class="levels-io-row">
+          <input type="number" id="lvOutB" min="0" max="254" value="0">
+          <input type="number" id="lvOutW" min="1" max="255" value="255">
+        </div>
       </div>
     </details>
 
@@ -1253,7 +1262,7 @@
       return data;
     }
     if(type==='levels'){
-      const gamma = params.gamma/100;
+      const gamma = params.gamma;
       const lut = new Uint8ClampedArray(256);
       for(let v=0;v<256;v++){
         let x = (v-params.inB)/Math.max(1,(params.inW-params.inB));
@@ -3285,12 +3294,10 @@
 
     beginEdit();
     beginAdjustmentSession('levels', '레벨');
-    lvInB.value = 20; lvInW.value = 255; lvGamma.value = 130; lvOutB.value = 0; lvOutW.value = 255;
-    document.getElementById('lvInBVal').textContent = '20';
-    document.getElementById('lvInWVal').textContent = '255';
-    document.getElementById('lvGammaVal').textContent = '1.30';
-    document.getElementById('lvOutBVal').textContent = '0';
-    document.getElementById('lvOutWVal').textContent = '255';
+    lvInB.value = 20; lvInW.value = 255; lvGamma.value = 1.30; lvOutB.value = 0; lvOutW.value = 255;
+    computeLevelsHistogram();
+    drawLevelsInputCanvas();
+    drawLevelsOutputCanvas();
     runLevelsPreview();
     applyLevelsAction();
     endAdjustmentSession();
@@ -3948,12 +3955,150 @@
   function cancelSCAction(){ cancelEdit(); resetSCInputs(); }
 
   // ---------- Levels ----------
+  // Photoshop-style Levels: a histogram of the SOURCE layer (the pixels this
+  // adjustment reads from — untouched by it, so the histogram never moves as
+  // you drag) sits over a black-to-white gradient bar with three draggable
+  // triangle handles (input black/gamma/white), plus a second, simpler bar
+  // with two handles for output black/white. Each handle's position is
+  // mirrored by a number input directly below it, and either one drives the
+  // same underlying lvInB/lvGamma/lvInW/lvOutB/lvOutW values.
   const lvInB=document.getElementById('lvInB'), lvInW=document.getElementById('lvInW'), lvGamma=document.getElementById('lvGamma');
   const lvOutB=document.getElementById('lvOutB'), lvOutW=document.getElementById('lvOutW');
+  const levelsInputCanvas = document.getElementById('levelsInputCanvas');
+  const licx = levelsInputCanvas.getContext('2d');
+  const LV_IN_W = levelsInputCanvas.width;
+  const LV_HIST_H = 96, LV_BAR_Y = 100, LV_BAR_H = 14, LV_HANDLE_H = 12;
+  const levelsOutputCanvas = document.getElementById('levelsOutputCanvas');
+  const locx = levelsOutputCanvas.getContext('2d');
+  const LV_OUT_W = levelsOutputCanvas.width;
+  const LV_OUT_BAR_Y = 4, LV_OUT_BAR_H = 14;
+
+  // Snapshot of the source layer's luminance distribution, taken once per
+  // editing session rather than recomputed on every drag — like Photoshop,
+  // the histogram always shows the untouched input; only the handles move.
+  let levelsHistogram = null;
+  function computeLevelsHistogram(){
+    levelsHistogram = new Array(256).fill(0);
+    const source = previewSourceLayerId!=null ? layers.find(l=>l.id===previewSourceLayerId) : activeLayer();
+    if(!source || !mainCanvas.width || !mainCanvas.height) return;
+    const data = source.ctx.getImageData(0,0,mainCanvas.width,mainCanvas.height).data;
+    for(let i=0;i<data.length;i+=4){
+      if(data[i+3]<10) continue; // near-transparent pixels would just spike bin 0
+      const lum = (0.299*data[i]+0.587*data[i+1]+0.114*data[i+2])|0;
+      levelsHistogram[lum]++;
+    }
+  }
+  // The gray-point triangle's screen position for a given gamma: solving
+  // x^(1/gamma)=0.5 (the input fraction that maps to mid-gray output) for x
+  // gives x=0.5^gamma — smaller x (handle nearer the black point) means a
+  // larger gamma, matching Photoshop's left-brightens/right-darkens feel.
+  function levelsGammaHandleX(inB, inW, gamma){
+    return inB + (inW-inB)*Math.pow(0.5, gamma);
+  }
+  function drawLevelsTriangle(c, x, tipY, fill, stroke){
+    const w=7;
+    c.beginPath();
+    c.moveTo(x, tipY);
+    c.lineTo(x-w, tipY+LV_HANDLE_H);
+    c.lineTo(x+w, tipY+LV_HANDLE_H);
+    c.closePath();
+    c.fillStyle = fill; c.fill();
+    c.strokeStyle = stroke; c.lineWidth = 1; c.stroke();
+  }
+  function drawLevelsInputCanvas(){
+    licx.fillStyle = '#101214';
+    licx.fillRect(0,0,levelsInputCanvas.width,levelsInputCanvas.height);
+    if(levelsHistogram){
+      const max = Math.max(1, ...levelsHistogram);
+      licx.fillStyle = 'rgba(224,224,230,.8)';
+      for(let v=0;v<256;v++){
+        // sqrt compresses the scale so a single dominant bin (a flat-color
+        // area) doesn't flatten every other bar down to invisibility.
+        const h = Math.sqrt(levelsHistogram[v]/max) * (LV_HIST_H-4);
+        if(h>0.5) licx.fillRect(v, LV_HIST_H-h, 1, h);
+      }
+    }
+    const grad = licx.createLinearGradient(0,0,LV_IN_W,0);
+    grad.addColorStop(0,'#000'); grad.addColorStop(1,'#fff');
+    licx.fillStyle = grad;
+    licx.fillRect(0, LV_BAR_Y, LV_IN_W, LV_BAR_H);
+    const inB = parseInt(lvInB.value,10)||0, inW = parseInt(lvInW.value,10)||255;
+    const gamma = parseFloat(lvGamma.value)||1;
+    const gammaX = levelsGammaHandleX(inB, inW, gamma);
+    const barBottom = LV_BAR_Y+LV_BAR_H;
+    drawLevelsTriangle(licx, inB, barBottom, '#0e0e12', '#f5f4f8');
+    drawLevelsTriangle(licx, gammaX, barBottom, '#808080', '#f5f4f8');
+    drawLevelsTriangle(licx, inW, barBottom, '#fff', '#0e0e12');
+  }
+  function drawLevelsOutputCanvas(){
+    locx.fillStyle = '#101214';
+    locx.fillRect(0,0,levelsOutputCanvas.width,levelsOutputCanvas.height);
+    const grad = locx.createLinearGradient(0,0,LV_OUT_W,0);
+    grad.addColorStop(0,'#000'); grad.addColorStop(1,'#fff');
+    locx.fillStyle = grad;
+    locx.fillRect(0, LV_OUT_BAR_Y, LV_OUT_W, LV_OUT_BAR_H);
+    const outB = parseInt(lvOutB.value,10)||0, outW = parseInt(lvOutW.value,10)||255;
+    const barBottom = LV_OUT_BAR_Y+LV_OUT_BAR_H;
+    drawLevelsTriangle(locx, outB, barBottom, '#0e0e12', '#f5f4f8');
+    drawLevelsTriangle(locx, outW, barBottom, '#fff', '#0e0e12');
+  }
+  function levelsCanvasX(canvas, e){
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width/rect.width;
+    return Math.max(0, Math.min(255, Math.round((e.clientX-rect.left)*scaleX)));
+  }
+  let levelsDragHandle = null;
+  function handleLevelsInputDrag(x){
+    const inB = parseInt(lvInB.value,10)||0, inW = parseInt(lvInW.value,10)||255;
+    if(levelsDragHandle==='inB'){
+      lvInB.value = Math.max(0, Math.min(x, inW-1));
+    } else if(levelsDragHandle==='inW'){
+      lvInW.value = Math.max(inB+1, Math.min(x, 255));
+    } else if(levelsDragHandle==='gamma'){
+      const frac = Math.max(0.001, Math.min(0.999, (x-inB)/Math.max(1,(inW-inB))));
+      lvGamma.value = Math.max(0.1, Math.min(9.99, Math.log(frac)/Math.log(0.5))).toFixed(2);
+    }
+    drawLevelsInputCanvas();
+    runLevelsPreview();
+  }
+  levelsInputCanvas.addEventListener('pointerdown', e=>{
+    const x = levelsCanvasX(levelsInputCanvas, e);
+    const inB = parseInt(lvInB.value,10)||0, inW = parseInt(lvInW.value,10)||255;
+    const gammaX = levelsGammaHandleX(inB, inW, parseFloat(lvGamma.value)||1);
+    const distB = Math.abs(x-inB), distG = Math.abs(x-gammaX), distW = Math.abs(x-inW);
+    levelsDragHandle = (distB<=distG && distB<=distW) ? 'inB' : (distW<=distG ? 'inW' : 'gamma');
+    levelsInputCanvas.setPointerCapture(e.pointerId);
+    handleLevelsInputDrag(x);
+  });
+  levelsInputCanvas.addEventListener('pointermove', e=>{
+    if(!levelsDragHandle) return;
+    handleLevelsInputDrag(levelsCanvasX(levelsInputCanvas, e));
+  });
+  levelsInputCanvas.addEventListener('pointerup', ()=>{ levelsDragHandle=null; });
+  let levelsOutDragHandle = null;
+  function handleLevelsOutputDrag(x){
+    const outB = parseInt(lvOutB.value,10)||0, outW = parseInt(lvOutW.value,10)||255;
+    if(levelsOutDragHandle==='outB') lvOutB.value = Math.max(0, Math.min(x, outW-1));
+    else lvOutW.value = Math.max(outB+1, Math.min(x, 255));
+    drawLevelsOutputCanvas();
+    runLevelsPreview();
+  }
+  levelsOutputCanvas.addEventListener('pointerdown', e=>{
+    const x = levelsCanvasX(levelsOutputCanvas, e);
+    const outB = parseInt(lvOutB.value,10)||0, outW = parseInt(lvOutW.value,10)||255;
+    levelsOutDragHandle = Math.abs(x-outB)<=Math.abs(x-outW) ? 'outB' : 'outW';
+    levelsOutputCanvas.setPointerCapture(e.pointerId);
+    handleLevelsOutputDrag(x);
+  });
+  levelsOutputCanvas.addEventListener('pointermove', e=>{
+    if(!levelsOutDragHandle) return;
+    handleLevelsOutputDrag(levelsCanvasX(levelsOutputCanvas, e));
+  });
+  levelsOutputCanvas.addEventListener('pointerup', ()=>{ levelsOutDragHandle=null; });
   function runLevelsPreview(){
     beginEdit();
-    const inB=parseInt(lvInB.value,10), inW=parseInt(lvInW.value,10), gamma=parseInt(lvGamma.value,10)/100;
-    const outB=parseInt(lvOutB.value,10), outW=parseInt(lvOutW.value,10);
+    const inB=parseInt(lvInB.value,10)||0, inW=parseInt(lvInW.value,10)||255, gamma=parseFloat(lvGamma.value)||1;
+    const outB=parseInt(lvOutB.value,10)||0, outW=parseInt(lvOutW.value,10)||255;
     const lut = new Uint8ClampedArray(256);
     for(let v=0;v<256;v++){
       let x = (v-inB)/Math.max(1,(inW-inB));
@@ -3969,27 +4114,21 @@
     });
     if(previewTargetLayerId!=null){
       const t = layers.find(l=>l.id===previewTargetLayerId);
-      if(t) t.adjustmentParams = {inB:parseInt(lvInB.value,10), inW:parseInt(lvInW.value,10), gamma:parseInt(lvGamma.value,10), outB:parseInt(lvOutB.value,10), outW:parseInt(lvOutW.value,10)};
+      if(t) t.adjustmentParams = {inB, inW, gamma, outB, outW};
     }
   }
-  [lvInB,lvInW,lvGamma,lvOutB,lvOutW].forEach(el=>{
-    el.addEventListener('input', ()=>{
-      document.getElementById('lvInBVal').textContent=lvInB.value;
-      document.getElementById('lvInWVal').textContent=lvInW.value;
-      document.getElementById('lvGammaVal').textContent=(parseInt(lvGamma.value,10)/100).toFixed(2);
-      document.getElementById('lvOutBVal').textContent=lvOutB.value;
-      document.getElementById('lvOutWVal').textContent=lvOutW.value;
-      runLevelsPreview();
-    });
+  [lvInB,lvInW,lvGamma].forEach(el=>{
+    el.addEventListener('input', ()=>{ drawLevelsInputCanvas(); runLevelsPreview(); });
+  });
+  [lvOutB,lvOutW].forEach(el=>{
+    el.addEventListener('input', ()=>{ drawLevelsOutputCanvas(); runLevelsPreview(); });
   });
   function resetLevelsInputs(params){
-    const p = params || {inB:0, inW:255, gamma:100, outB:0, outW:255};
-    lvInB.value=p.inB; lvInW.value=p.inW; lvGamma.value=p.gamma; lvOutB.value=p.outB; lvOutW.value=p.outW;
-    document.getElementById('lvInBVal').textContent=p.inB;
-    document.getElementById('lvInWVal').textContent=p.inW;
-    document.getElementById('lvGammaVal').textContent=(p.gamma/100).toFixed(2);
-    document.getElementById('lvOutBVal').textContent=p.outB;
-    document.getElementById('lvOutWVal').textContent=p.outW;
+    const p = params || {inB:0, inW:255, gamma:1, outB:0, outW:255};
+    lvInB.value=p.inB; lvInW.value=p.inW; lvGamma.value=Number(p.gamma).toFixed(2); lvOutB.value=p.outB; lvOutW.value=p.outW;
+    computeLevelsHistogram();
+    drawLevelsInputCanvas();
+    drawLevelsOutputCanvas();
   }
   function applyLevelsAction(){ commitEdit(); resetLevelsInputs(); }
   function cancelLevelsAction(){ cancelEdit(); resetLevelsInputs(); }
