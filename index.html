@@ -1568,11 +1568,23 @@
     if(e.target.closest('#addLayerBtn')) return;
     toggleLayerPanel();
   });
+  // Counts only existing "레이어 N" layers (배경/선택색상/레벨/곡선/입술 등 never
+  // match), so deleting/renaming those doesn't skip numbers and adding a
+  // plain layer when only 배경 (or an adjustment chain) exists still starts
+  // at 레이어 1 instead of layers.length+1.
+  function nextPlainLayerName(){
+    let max = 0;
+    layers.forEach(l=>{
+      const m = /^레이어 (\d+)$/.exec(l.name);
+      if(m) max = Math.max(max, parseInt(m[1],10));
+    });
+    return '레이어 '+(max+1);
+  }
   const addLayerBtn = document.getElementById('addLayerBtn');
   addLayerBtn.addEventListener('click', ()=>{
     if(!mainCanvas.width || !mainCanvas.height) return;
     pushUndo(snapshotState());
-    const layer = createLayer('레이어 '+(layers.length+1), mainCanvas.width, mainCanvas.height);
+    const layer = createLayer(nextPlainLayerName(), mainCanvas.width, mainCanvas.height);
     layers.push(layer);
     activeLayerId = layer.id;
     compositeLayers();
