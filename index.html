@@ -182,6 +182,27 @@
      of specificity, as .url-import-back hit earlier in this project). */
   .crop-autozoom-toggle-group{display:flex;align-items:center;gap:6px;}
   .crop-autozoom-toggle-group[hidden]{display:none;}
+  /* Same top-left-overlay treatment as .crop-autozoom-toggle, but gated on
+     hasSelection (via JS toggling the [hidden] attribute) instead of a
+     body-level mode class — a selection can be live while any menu (or
+     none) is open, not just one specific one. */
+  .selection-float-toggle{
+    display:flex;position:absolute;top:10px;left:10px;z-index:25;
+    align-items:center;gap:6px;
+    font-size:12px;color:var(--text);white-space:nowrap;
+    text-shadow:0 1px 3px rgba(0,0,0,.6);
+  }
+  .selection-float-toggle[hidden]{display:none;}
+  .selection-float-toggle .switch{width:34px;height:20px;}
+  .selection-float-toggle .switch-thumb{width:16px;height:16px;}
+  .selection-float-toggle .switch input:checked + .switch-track .switch-thumb{transform:translateX(14px);}
+  .selection-clear-pill{
+    position:absolute;top:10px;right:10px;z-index:25;
+    padding:7px 16px;border-radius:999px;
+    background:rgba(20,20,24,.7);border:1px solid rgba(255,255,255,.3);
+    color:#fff;font-size:12px;font-weight:600;
+  }
+  .selection-clear-pill[hidden]{display:none;}
   .crop-rect{
     position:absolute;pointer-events:none;
     border:1px solid rgba(255,255,255,.9);
@@ -765,6 +786,19 @@
           </label>
         </span>
       </div>
+      <!-- Floats over the image regardless of which menu (if any) is open —
+           only whether a selection actually exists matters. Hidden whenever
+           크롭 is active too, since that reuses this same top-left/top-right
+           corner for its own controls (see .crop-autozoom-toggle above/
+           .selection-clear-pill below) and the two modes never overlap. -->
+      <div class="selection-float-toggle" id="selectionOverlayWrap" hidden>
+        <span>선택 영역 표시</span>
+        <label class="switch">
+          <input type="checkbox" id="showSelOverlay" checked>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+      </div>
+      <button type="button" class="selection-clear-pill" id="clearSelFloatBtn" hidden>선택 해제</button>
     </div>
     <div class="layer-panel collapsed" id="layerPanel">
       <div class="layer-panel-header">
@@ -1040,14 +1074,6 @@
         </label>
         <div class="btnrow">
           <button id="invertSelBtn">선택 반전</button>
-          <button id="clearSelBtn" class="ghost">선택 해제</button>
-        </div>
-        <div class="checkline">
-          <span>선택 영역 표시</span>
-          <label class="switch">
-            <input type="checkbox" id="showSelOverlay" checked>
-            <span class="switch-track"><span class="switch-thumb"></span></span>
-          </label>
         </div>
       </div>
     </details>
@@ -1773,6 +1799,7 @@
     layers = [baseLayer];
     activeLayerId = baseLayer.id;
     hasSelection = false;
+    maskVersion++;
     undoStack = [];
     redoStack = [];
     document.body.classList.remove('no-image');
@@ -1935,6 +1962,7 @@
     activeLayerId = s.activeLayerId;
     mctx.putImageData(s.mask,0,0);
     hasSelection = s.hasSelection;
+    maskVersion++;
     updateDims();
     compositeLayers();
     renderSelectionOverlay();
@@ -1971,6 +1999,7 @@
     mainCanvas.style.width=''; mainCanvas.style.height='';
     overlayCanvas.style.width=''; overlayCanvas.style.height='';
     hasSelection=false;
+    maskVersion++;
     undoStack=[];
     redoStack=[];
     editingSnapshot=null;
@@ -2141,6 +2170,7 @@
     activeLayerId = rec.activeLayerId;
     mctx.putImageData(rec.mask, 0, 0);
     hasSelection = rec.hasSelection;
+    maskVersion++;
     undoStack = []; redoStack = [];
     document.body.classList.remove('no-image');
     emptyState.style.display='none';
@@ -2195,25 +2225,118 @@
       mctx.fillRect(0,0,maskCanvas.width,maskCanvas.height);
       mctx.restore();
       hasSelection = true;
+      maskVersion++;
     }
   }
 
-  // ---------- Selection overlay rendering ----------
+  // ---------- Selection overlay rendering (Photoshop-style marching ants) ----------
   const showSelOverlayChk = document.getElementById('showSelOverlay');
-  function renderSelectionOverlay(){
+  const selectionOverlayWrap = document.getElementById('selectionOverlayWrap');
+  const clearSelFloatBtn = document.getElementById('clearSelFloatBtn');
+
+  // Traces the mask's alpha boundary (thresholded at 50%) into one or more
+  // closed polylines, cached as Path2D — recomputed only when the mask
+  // itself actually changes (see maskVersion below), never per animation
+  // frame or during a live lasso/shape drag preview, since a full-canvas
+  // pixel scan on every pointermove would be far too slow.
+  let selectionContourPaths = [];
+  let maskVersion = 0;
+  let contourMaskVersion = -1;
+  function computeSelectionContours(){
+    selectionContourPaths = [];
+    const w = maskCanvas.width, h = maskCanvas.height;
+    if(!hasSelection || !w || !h) return;
+    const data = mctx.getImageData(0,0,w,h).data;
+    const THRESH = 128;
+    const sel = (x,y) => (x>=0 && y>=0 && x<w && y<h) ? data[(y*w+x)*4+3] >= THRESH : false;
+    // Adjacency graph over grid VERTICES (integer corner points), one edge
+    // per selected/unselected pixel boundary — a well-formed region's
+    // boundary is then just a set of simple loops through this graph.
+    const key = (x,y) => x*(h+1)+y;
+    const adj = new Map();
+    function addEdge(x1,y1,x2,y2){
+      const k1=key(x1,y1), k2=key(x2,y2);
+      if(!adj.has(k1)) adj.set(k1,[]);
+      if(!adj.has(k2)) adj.set(k2,[]);
+      adj.get(k1).push(k2);
+      adj.get(k2).push(k1);
+    }
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        if(!sel(x,y)) continue;
+        if(!sel(x,y-1)) addEdge(x,y,x+1,y);
+        if(!sel(x,y+1)) addEdge(x,y+1,x+1,y+1);
+        if(!sel(x-1,y)) addEdge(x,y,x,y+1);
+        if(!sel(x+1,y)) addEdge(x+1,y,x+1,y+1);
+      }
+    }
+    const visitedEdges = new Set();
+    const edgeKey = (a,b) => a<b ? a*1e9+b : b*1e9+a;
+    for(const [startKey, neighbors] of adj){
+      for(const n0 of neighbors){
+        const ek0 = edgeKey(startKey, n0);
+        if(visitedEdges.has(ek0)) continue;
+        const verts = [startKey];
+        visitedEdges.add(ek0);
+        let cur = n0;
+        verts.push(cur);
+        while(cur!==startKey){
+          const opts = adj.get(cur) || [];
+          let next = -1;
+          for(const o of opts){
+            const oek = edgeKey(cur,o);
+            if(!visitedEdges.has(oek)){ next = o; break; }
+          }
+          if(next===-1) break;
+          visitedEdges.add(edgeKey(cur,next));
+          cur = next;
+          verts.push(cur);
+          if(verts.length > (w+1)*(h+1)) break; // safety valve
+        }
+        if(verts.length>2){
+          const path = new Path2D();
+          const vx = k => Math.floor(k/(h+1)), vy = k => k - vx(k)*(h+1);
+          path.moveTo(vx(verts[0]), vy(verts[0]));
+          for(let i=1;i<verts.length;i++) path.lineTo(vx(verts[i]), vy(verts[i]));
+          selectionContourPaths.push(path);
+        }
+      }
+    }
+  }
+  let antsPhase = 0;
+  let antsRAF = null;
+  function stepAnts(){
+    antsPhase = (antsPhase+0.35) % 12;
+    drawSelectionOverlayFrame();
+    antsRAF = requestAnimationFrame(stepAnts);
+  }
+  function updateSelectionFloatUI(){
+    const show = hasSelection && !cropModeActive;
+    selectionOverlayWrap.hidden = !show;
+    clearSelFloatBtn.hidden = !show;
+    const animating = show && showSelOverlayChk.checked;
+    if(animating && !antsRAF) antsRAF = requestAnimationFrame(stepAnts);
+    else if(!animating && antsRAF){ cancelAnimationFrame(antsRAF); antsRAF = null; }
+  }
+  // The actual draw — cheap, reused every animation frame. renderSelectionOverlay()
+  // (below) is the one that also decides whether the contour needs re-tracing.
+  function drawSelectionOverlayFrame(){
     const w=overlayCanvas.width, h=overlayCanvas.height;
     octx.clearRect(0,0,w,h);
     if(hasSelection && showSelOverlayChk.checked){
-      const maskData = mctx.getImageData(0,0,w,h).data;
-      const out = octx.createImageData(w,h);
-      for(let i=0;i<maskData.length;i+=4){
-        const a = maskData[i+3];
-        // Unselected area gets a darker, more opaque tint than before so it
-        // reads as visibly dimmed, not just faintly blue-tinted.
-        const tintAlpha = (255-a) * 0.5;
-        out.data[i]=6; out.data[i+1]=10; out.data[i+2]=22; out.data[i+3]=tintAlpha;
-      }
-      octx.putImageData(out,0,0);
+      // Classic black/white marching ants: two passes of the same dash
+      // pattern, offset by half a cycle, so the line reads against any
+      // background instead of just one color's dashes disappearing into it.
+      octx.save();
+      octx.lineWidth = 1;
+      octx.setLineDash([6,6]);
+      octx.lineDashOffset = -antsPhase;
+      octx.strokeStyle = '#000';
+      for(const p of selectionContourPaths) octx.stroke(p);
+      octx.lineDashOffset = -antsPhase+6;
+      octx.strokeStyle = '#fff';
+      for(const p of selectionContourPaths) octx.stroke(p);
+      octx.restore();
     }
     if(lassoPoints.length>1){
       octx.strokeStyle='#4fd1c5'; octx.lineWidth=1.5;
@@ -2229,7 +2352,29 @@
       octx.stroke();
     }
   }
+  // The general-purpose "selection state changed, please redraw" entry
+  // point used throughout the file — re-traces the contour only when
+  // maskVersion has actually moved since the last trace (bumped wherever
+  // mctx's pixels are genuinely mutated), so calling this on every lasso
+  // pointermove during a drag (mask untouched, only the live preview
+  // moves) stays cheap.
+  function renderSelectionOverlay(){
+    if(maskVersion!==contourMaskVersion){
+      computeSelectionContours();
+      contourMaskVersion = maskVersion;
+    }
+    updateSelectionFloatUI();
+    drawSelectionOverlayFrame();
+  }
   showSelOverlayChk.addEventListener('change', renderSelectionOverlay);
+  clearSelFloatBtn.addEventListener('click', ()=>{
+    beginEdit();
+    sessionDirty = true;
+    mctx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
+    hasSelection = false;
+    maskVersion++;
+    renderSelectionOverlay();
+  });
   // Selection actions no longer push their own undo step: opening 선택 영역
   // already began a session (beginEdit), and every edit made while it's open —
   // however many brush strokes, invert/clear clicks, feather adjustments — bundles
@@ -2242,13 +2387,7 @@
     const id = mctx.getImageData(0,0,w,h);
     for(let i=3;i<id.data.length;i+=4) id.data[i] = 255-id.data[i];
     mctx.putImageData(id,0,0);
-    renderSelectionOverlay();
-  });
-  document.getElementById('clearSelBtn').addEventListener('click', ()=>{
-    beginEdit();
-    sessionDirty = true;
-    mctx.clearRect(0,0,maskCanvas.width,maskCanvas.height);
-    hasSelection=false;
+    maskVersion++;
     renderSelectionOverlay();
   });
 
@@ -2276,6 +2415,7 @@
       if(featherOnMask) mctx.putImageData(featherOnMask,0,0);
       featherOnMask = null;
     }
+    maskVersion++;
     renderSelectionOverlay();
   });
   featherRange.addEventListener('input', ()=>{
@@ -2285,6 +2425,7 @@
     const r = parseInt(featherRange.value,10);
     const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, r);
     mctx.putImageData(blurred,0,0);
+    maskVersion++;
     renderSelectionOverlay();
   });
   function resetFeatherUI(){
@@ -2303,6 +2444,7 @@
     const r = parseInt(featherRange.value,10);
     const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, r);
     mctx.putImageData(blurred,0,0);
+    maskVersion++;
   }
   // 영역 선택 opens with feather ON by default — mirrors exactly what
   // checking the box does, applied to whatever the current selection already
@@ -2323,6 +2465,7 @@
     featherOnMask = mctx.getImageData(0,0,maskCanvas.width,maskCanvas.height);
     const blurred = boxBlurAlpha(featherOnMask, maskCanvas.width, maskCanvas.height, 20);
     mctx.putImageData(blurred,0,0);
+    maskVersion++;
     renderSelectionOverlay();
   }
   function applySelectionAction(){ commitEdit(); resetFeatherUI(); }
@@ -2828,6 +2971,7 @@
         mctx.fill();
         mctx.restore();
         hasSelection = true;
+        maskVersion++;
         reapplyFeatherIfOn();
       }
       shapeSelectPointerId = null;
@@ -2849,6 +2993,7 @@
       mctx.closePath(); mctx.fill();
       mctx.restore();
       hasSelection = true;
+      maskVersion++;
       lassoPoints = [];
       reapplyFeatherIfOn();
       renderSelectionOverlay();
@@ -2911,6 +3056,8 @@
     });
     activeLayerId = editingSnapshot.activeLayerId;
     hasSelection=false;
+    maskVersion++;
+    updateSelectionFloatUI();
     updateDims();
     compositeLayers();
     renderLayerPanel();
@@ -3341,6 +3488,7 @@
     updateCircleCropRowVisibility();
     cropFrame.hidden = false;
     renderCropFrame();
+    updateSelectionFloatUI();
   }
   // Committing/discarding the pending edit is handled by applyCropAction/
   // cancelCropAction (via the header's 적용/취소) before this ever runs, so
@@ -3355,6 +3503,7 @@
     mainCanvas.style.top = '';
     overlayCanvas.style.display = '';
     fitToScreen();
+    updateSelectionFloatUI();
   }
   // Adapts the CURRENT crop rectangle to a newly-picked ratio instead of
   // discarding it — trims whichever dimension is now too big for the new
@@ -3733,6 +3882,8 @@
     });
     setCanvasSize(cropPxW,cropPxH);
     hasSelection=false;
+    maskVersion++;
+    updateSelectionFloatUI();
     syncResizeInputs();
     updateDims();
     cropRotationDeg = 0;
