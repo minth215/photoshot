@@ -185,6 +185,11 @@
   .crop-rect{
     position:absolute;pointer-events:none;
     border:1px solid rgba(255,255,255,.9);
+    /* A huge-spread, blur-free shadow around the frame's own box reads as
+       a dimmed backdrop everywhere else — clipped to exactly the crop
+       viewport by .crop-frame's own overflow:hidden, and needs no extra
+       DOM or JS to track the frame's position/size as it's dragged. */
+    box-shadow:0 0 0 9999px rgba(0,0,0,.55);
   }
   .circle-crop-mask{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
   .crop-gridline{position:absolute;background:rgba(255,255,255,.35);pointer-events:none;}
@@ -492,6 +497,8 @@
     padding:14px;
   }
   .toolrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  .icon-toolbtn{flex:1 1 auto;display:flex;align-items:center;justify-content:center;padding:8px;}
+  .icon-toolbtn svg{width:20px;height:20px;}
   .effect-grid:not([hidden]){display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
   .effect-tile{display:flex;flex-direction:column;align-items:center;gap:6px;background:transparent;border:none;padding:0;}
   .effect-thumb{width:100%;aspect-ratio:1;border-radius:16px;border:1px solid var(--line);background:#000;display:block;}
@@ -1010,18 +1017,16 @@
       <summary>선택</summary>
       <div class="group-body">
         <div class="toolrow">
-          <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
-          <button class="toolbtn" data-tool="brush-add" title="브러쉬로 선택 영역을 더합니다">브러쉬 +</button>
-          <button class="toolbtn" data-tool="brush-sub" title="브러쉬로 선택 영역을 뺍니다">브러쉬 -</button>
+          <button class="toolbtn icon-toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다" aria-label="올가미">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-4.4 0-8 2.7-8 6s3.6 6 8 6c.7 0 1.4-.1 2-.2"/><path d="M9.5 14.5c-1.2 2-1.6 4-.3 5s3-.2 3.8-2.3"/><circle cx="13.3" cy="17.2" r="1.3" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button class="toolbtn icon-toolbtn" data-tool="rect-select" title="사각형으로 드래그해서 영역을 선택합니다" aria-label="사각형 선택">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="1"/></svg>
+          </button>
+          <button class="toolbtn icon-toolbtn" data-tool="ellipse-select" title="원형으로 드래그해서 영역을 선택합니다" aria-label="원형 선택">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>
+          </button>
         </div>
-        <label class="field" id="brushSizeWrap" style="display:none;">
-          <span class="row"><span>브러쉬 크기</span><span id="brushSizeVal">40</span></span>
-          <input type="range" id="brushSize" min="4" max="200" value="40">
-        </label>
-        <label class="field" id="brushHardnessWrap" style="display:none;">
-          <span class="row"><span>브러쉬 경도</span><span id="brushHardnessVal">80</span></span>
-          <input type="range" id="brushHardness" min="0" max="100" value="80">
-        </label>
         <div class="checkline">
           <span>페더</span>
           <label class="switch">
@@ -1977,7 +1982,8 @@
     layerToggleBtn.style.display='none';
     layerList.innerHTML='';
     viewScale=1; userZoomed=false; panOffsetX=0; panOffsetY=0;
-    lassoPoints=[]; dragStart=null; brushDrawing=false;
+    lassoPoints=[]; dragStart=null;
+    shapeSelectPointerId=null; shapeSelectStart=null; shapeSelectCurrent=null;
     drawingActive=false; lastDrawPos=null;
     setTool('none');
     cropFrame.hidden=true;
@@ -2172,9 +2178,12 @@
       const bt = b.dataset.bgtool==='add' ? 'bg-add' : 'bg-sub';
       b.classList.toggle('active', bt===t);
     });
-    document.getElementById('brushSizeWrap').style.display = (t==='brush-add'||t==='brush-sub') ? 'flex':'none';
-    document.getElementById('brushHardnessWrap').style.display = (t==='brush-add'||t==='brush-sub') ? 'flex':'none';
     overlayCanvas.style.cursor = t==='none' ? 'default' : 'crosshair';
+    // Switching tools mid-drag would otherwise leave a stale shape preview
+    // (and an orphaned pointer capture) behind.
+    shapeSelectPointerId = null;
+    shapeSelectStart = null;
+    shapeSelectCurrent = null;
     renderSelectionOverlay();
   }
 
@@ -2211,6 +2220,12 @@
       octx.beginPath();
       octx.moveTo(lassoPoints[0][0], lassoPoints[0][1]);
       for(let p of lassoPoints) octx.lineTo(p[0],p[1]);
+      octx.stroke();
+    }
+    if(shapeSelectStart && shapeSelectCurrent){
+      const r = computeShapeRect(shapeSelectStart[0], shapeSelectStart[1], shapeSelectCurrent[0], shapeSelectCurrent[1], isShapeAspectLocked());
+      octx.strokeStyle='#4fd1c5'; octx.lineWidth=1.5;
+      traceShapePath(octx, currentTool, r);
       octx.stroke();
     }
   }
@@ -2313,10 +2328,9 @@
   function applySelectionAction(){ commitEdit(); resetFeatherUI(); }
   function cancelSelectionAction(){ cancelEdit(); resetFeatherUI(); }
 
-  // ---------- Lasso & Brush interaction ----------
+  // ---------- Lasso & shape selection interaction ----------
   let lassoPoints = [];
   let dragStart = null;
-  let brushDrawing = false;
   let bgPaintingActive = false;
 
   function canvasPos(e){
@@ -2326,24 +2340,52 @@
     return [ (e.clientX-rect.left)*scaleX, (e.clientY-rect.top)*scaleY ];
   }
 
-  function paintBrush(x,y,subtract){
-    sessionDirty = true;
-    const size = parseInt(document.getElementById('brushSize').value,10);
-    const hardness = parseInt(document.getElementById('brushHardness').value,10)/100;
-    const r = size/2;
-    mctx.save();
-    if(subtract){ ensureMaskInitialized(); mctx.globalCompositeOperation='destination-out'; }
-    else mctx.globalCompositeOperation='source-over';
-    // A radial gradient with equal inner/outer radius (hardness at its 100%
-    // max, so r*hardness===r) renders as fully transparent in Chromium —
-    // keep the inner radius at least half a px short of the outer one.
-    const grad = mctx.createRadialGradient(x,y,Math.max(0,Math.min(r*hardness,r-0.5)),x,y,r);
-    grad.addColorStop(0,'rgba(255,255,255,1)');
-    grad.addColorStop(1,'rgba(255,255,255,0)');
-    mctx.fillStyle = grad;
-    mctx.beginPath(); mctx.arc(x,y,r,0,Math.PI*2); mctx.fill();
-    mctx.restore();
-    if(!subtract) hasSelection = true;
+  // 사각형/원 selection: drag out a bounding box from the pointerdown point
+  // to wherever the pointer currently is. Locking the aspect (square/circle,
+  // never an oval) is driven by whichever of two equivalent modifiers is
+  // currently active — Shift on a physical keyboard, or a second finger
+  // touching down while the first is still dragging (checked live off
+  // activePointers.size rather than a stored flag, so it can't go stale if
+  // events arrive out of order).
+  let shiftHeld = false;
+  window.addEventListener('keydown', e=>{
+    if(e.key==='Shift' && !shiftHeld){
+      shiftHeld = true;
+      if(shapeSelectPointerId!=null) renderSelectionOverlay();
+    }
+  });
+  window.addEventListener('keyup', e=>{
+    if(e.key==='Shift'){
+      shiftHeld = false;
+      if(shapeSelectPointerId!=null) renderSelectionOverlay();
+    }
+  });
+  let shapeSelectPointerId = null;
+  let shapeSelectStart = null;
+  let shapeSelectCurrent = null;
+  function isShapeAspectLocked(){
+    return shiftHeld || (shapeSelectPointerId!=null && activePointers.size>=2);
+  }
+  // Normalizes a drag into a top-left-origin {x,y,w,h} box; when locked,
+  // both sides are forced to the larger of the two, each keeping the
+  // direction (sign) the drag was already heading in.
+  function computeShapeRect(x0,y0,x1,y1,locked){
+    let w = x1-x0, h = y1-y0;
+    if(locked){
+      const s = Math.max(Math.abs(w), Math.abs(h));
+      w = (w<0?-1:1)*s;
+      h = (h<0?-1:1)*s;
+    }
+    const x = w<0 ? x0+w : x0;
+    const y = h<0 ? y0+h : y0;
+    return {x, y, w:Math.abs(w), h:Math.abs(h)};
+  }
+  // Shared by both the live preview (renderSelectionOverlay) and the
+  // pointerup finalize step, so the two can never draw different shapes.
+  function traceShapePath(ctx, tool, r){
+    ctx.beginPath();
+    if(tool==='rect-select') ctx.rect(r.x, r.y, r.w, r.h);
+    else ctx.ellipse(r.x+r.w/2, r.y+r.h/2, r.w/2, r.h/2, 0, 0, Math.PI*2);
   }
 
   // ---------- Background removal ----------
@@ -2650,7 +2692,6 @@
     pinchStartPanY = cropModeActive ? imgOffsetY : panOffsetY;
     // a second finger cancels any in-progress single-finger tool action
     lassoPoints = [];
-    brushDrawing = false;
     drawingActive = false;
     lastDrawPos = null;
     bgPaintingActive = false;
@@ -2689,7 +2730,16 @@
   overlayCanvas.addEventListener('pointerdown', e=>{
     try{ overlayCanvas.setPointerCapture(e.pointerId); }catch(err){}
     activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if(activePointers.size>=2){ startPinch(); return; }
+    if(activePointers.size>=2){
+      // A second finger touching down mid-drag on a 사각형/원 selection is
+      // the touch equivalent of holding Shift — it locks the shape's aspect
+      // instead of starting a pinch. This is checked purely off pointer
+      // state (not viewport width), so it works the same on an iPad
+      // rendering the desktop layout as it does on a phone.
+      if(shapeSelectPointerId!=null){ renderSelectionOverlay(); return; }
+      startPinch();
+      return;
+    }
     if(currentTool==='none'){
       startPeek();
       return;
@@ -2697,10 +2747,10 @@
     const [x,y] = canvasPos(e);
     if(currentTool==='lasso'){
       lassoPoints = [[x,y]];
-    } else if(currentTool==='brush-add' || currentTool==='brush-sub'){
-      beginEdit();
-      brushDrawing = true;
-      paintBrush(x,y,currentTool==='brush-sub');
+    } else if(currentTool==='rect-select' || currentTool==='ellipse-select'){
+      shapeSelectPointerId = e.pointerId;
+      shapeSelectStart = [x,y];
+      shapeSelectCurrent = [x,y];
       renderSelectionOverlay();
     } else if(currentTool==='draw'){
       beginEdit();
@@ -2720,14 +2770,22 @@
   overlayCanvas.addEventListener('pointermove', e=>{
     if(activePointers.has(e.pointerId)) activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pinchActive){ updatePinch(); return; }
+    if(shapeSelectPointerId!=null){
+      // Only the primary finger's own movement updates the shape — an
+      // auxiliary aspect-lock finger just needs to be down, not dragged.
+      if(e.pointerId===shapeSelectPointerId){
+        shapeSelectCurrent = canvasPos(e);
+        renderSelectionOverlay();
+      } else if(activePointers.size>=2){
+        renderSelectionOverlay(); // reflects the lock engaging/disengaging
+      }
+      return;
+    }
     if(activePointers.size>=2) return;
     if(currentTool==='none') return;
     const [x,y] = canvasPos(e);
     if(currentTool==='lasso' && lassoPoints.length){
       lassoPoints.push([x,y]);
-      renderSelectionOverlay();
-    } else if(brushDrawing && (currentTool==='brush-add'||currentTool==='brush-sub')){
-      paintBrush(x,y,currentTool==='brush-sub');
       renderSelectionOverlay();
     } else if(drawingActive && currentTool==='draw' && lastDrawPos){
       paintDrawLine(lastDrawPos[0], lastDrawPos[1], x, y);
@@ -2746,6 +2804,38 @@
   }
   overlayCanvas.addEventListener('pointerup', e=>{
     endPeek();
+    if(shapeSelectPointerId!=null){
+      if(e.pointerId!==shapeSelectPointerId){
+        // The auxiliary aspect-lock finger lifted — keep dragging with the
+        // primary finger, just fall back to freeform.
+        activePointers.delete(e.pointerId);
+        renderSelectionOverlay();
+        return;
+      }
+      // Capture the lock state (Shift, or another finger STILL down right
+      // now) before removing this pointer, since isShapeAspectLocked()
+      // itself checks activePointers.size.
+      const locked = isShapeAspectLocked();
+      activePointers.delete(e.pointerId);
+      const r = computeShapeRect(shapeSelectStart[0], shapeSelectStart[1], shapeSelectCurrent[0], shapeSelectCurrent[1], locked);
+      if(r.w>1 && r.h>1){
+        beginEdit();
+        sessionDirty = true;
+        mctx.save();
+        mctx.globalCompositeOperation='source-over';
+        mctx.fillStyle='white';
+        traceShapePath(mctx, currentTool, r);
+        mctx.fill();
+        mctx.restore();
+        hasSelection = true;
+        reapplyFeatherIfOn();
+      }
+      shapeSelectPointerId = null;
+      shapeSelectStart = null;
+      shapeSelectCurrent = null;
+      renderSelectionOverlay();
+      return;
+    }
     if(releasePointer(e)){ dragStart=null; return; }
     if(currentTool==='lasso' && lassoPoints.length>2){
       beginEdit();
@@ -2765,11 +2855,6 @@
     } else if(currentTool==='lasso'){
       lassoPoints=[];
     }
-    if(currentTool==='brush-add'||currentTool==='brush-sub'){
-      brushDrawing=false;
-      reapplyFeatherIfOn();
-      renderSelectionOverlay();
-    }
     if(currentTool==='draw'){
       drawingActive=false;
       lastDrawPos=null;
@@ -2784,6 +2869,12 @@
     drawingActive=false;
     lastDrawPos=null;
     bgPaintingActive=false;
+    if(shapeSelectPointerId===e.pointerId){
+      shapeSelectPointerId = null;
+      shapeSelectStart = null;
+      shapeSelectCurrent = null;
+      renderSelectionOverlay();
+    }
     releasePointer(e);
   });
 
