@@ -113,16 +113,24 @@
   .stage-wrap{
     flex:1;display:flex;align-items:center;justify-content:center;
     padding:24px;overflow:hidden;position:relative;
-    background:
-      linear-gradient(45deg,#1a1c1f 25%,transparent 25%),
-      linear-gradient(-45deg,#1a1c1f 25%,transparent 25%),
-      linear-gradient(45deg,transparent 75%,#1a1c1f 75%),
-      linear-gradient(-45deg,transparent 75%,#1a1c1f 75%);
-    background-size:20px 20px;
-    background-position:0 0,0 10px,10px -10px,-10px 0px;
-    background-color:#101214;
+    background:#101214;
   }
-  .canvas-holder{position:relative;box-shadow:0 8px 30px rgba(0,0,0,.5);}
+  /* Sized by JS to exactly match the visible canvas (a flex item with no
+     explicit width/height shrinks to its content), so this checkerboard
+     only ever shows through actual transparent PIXELS of the image itself
+     (e.g. after 배경 제거) — never the stage's own margin around it, which
+     stays the plain ink-black set above. */
+  .canvas-holder{
+    position:relative;box-shadow:0 8px 30px rgba(0,0,0,.5);
+    background-image:
+      linear-gradient(45deg,#ccc 25%,transparent 25%),
+      linear-gradient(-45deg,#ccc 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#ccc 75%),
+      linear-gradient(-45deg,transparent 75%,#ccc 75%);
+    background-size:16px 16px;
+    background-position:0 0,0 8px,8px -8px,-8px 0px;
+    background-color:#fff;
+  }
   .canvas-holder canvas:not([hidden]){display:block;}
   #overlayCanvas{position:absolute;top:0;left:0;touch-action:none;}
   .canvas-holder.crop-mode{overflow:hidden;}
@@ -429,7 +437,21 @@
   }
   .layer-row.selected{border-color:var(--accent);background:rgba(79,209,197,.1);}
   .layer-row.dragging{opacity:.55;}
-  .layer-thumb{grid-row:1;grid-column:1;width:28px;height:28px;border-radius:4px;background:#000;border:1px solid var(--line);}
+  /* Same transparency checkerboard as .canvas-holder, scaled down — shows
+     through wherever the thumbnail canvas itself is left unpainted (see
+     renderLayerPanel's non-adjustment branch, which no longer fills black
+     before drawing the layer). */
+  .layer-thumb{
+    grid-row:1;grid-column:1;width:28px;height:28px;border-radius:4px;border:1px solid var(--line);
+    background-image:
+      linear-gradient(45deg,#ccc 25%,transparent 25%),
+      linear-gradient(-45deg,#ccc 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#ccc 75%),
+      linear-gradient(-45deg,transparent 75%,#ccc 75%);
+    background-size:8px 8px;
+    background-position:0 0,0 4px,4px -4px,-4px 0px;
+    background-color:#fff;
+  }
   .layer-name{grid-row:1;grid-column:2;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .layer-icon-btn{grid-row:1;width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-icon-btn svg{width:16px;height:16px;}
@@ -1469,7 +1491,10 @@
         if(layer.adjustmentMaskThumb) tctx.drawImage(layer.adjustmentMaskThumb,0,0,28,28);
         else { tctx.fillStyle = '#000'; tctx.fillRect(0,0,28,28); }
       } else {
-        tctx.fillStyle = '#000'; tctx.fillRect(0,0,28,28);
+        // Left unpainted rather than filled black first: the .layer-thumb
+        // CSS checkerboard behind the canvas shows through wherever the
+        // layer itself is transparent (e.g. after 배경 제거), instead of
+        // baking an opaque black backdrop into the thumbnail's own pixels.
         if(layer.canvas.width && layer.canvas.height) tctx.drawImage(layer.canvas,0,0,28,28);
       }
 
