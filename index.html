@@ -182,27 +182,25 @@
      of specificity, as .url-import-back hit earlier in this project). */
   .crop-autozoom-toggle-group{display:flex;align-items:center;gap:6px;}
   .crop-autozoom-toggle-group[hidden]{display:none;}
-  /* Same top-left-overlay treatment as .crop-autozoom-toggle, but gated on
-     hasSelection (via JS toggling the [hidden] attribute) instead of a
-     body-level mode class — a selection can be live while any menu (or
-     none) is open, not just one specific one. */
-  .selection-float-toggle{
-    display:flex;position:absolute;top:10px;left:10px;z-index:25;
-    align-items:center;gap:6px;
-    font-size:12px;color:var(--text);white-space:nowrap;
-    text-shadow:0 1px 3px rgba(0,0,0,.6);
+  /* A normal-flow bar directly under the header, spanning the top of the
+     image area — NOT floated over the image itself (that hid part of the
+     photo). Gated on hasSelection (via JS toggling [hidden]) rather than a
+     body-level mode class, since a selection can stay live while any menu
+     (or none) is open. */
+  .selection-topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:8px 16px;background:#181a1e;border-bottom:1px solid var(--line);
   }
-  .selection-float-toggle[hidden]{display:none;}
-  .selection-float-toggle .switch{width:34px;height:20px;}
-  .selection-float-toggle .switch-thumb{width:16px;height:16px;}
-  .selection-float-toggle .switch input:checked + .switch-track .switch-thumb{transform:translateX(14px);}
+  .selection-topbar[hidden]{display:none;}
+  .selection-topbar-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);white-space:nowrap;}
+  .selection-topbar-toggle .switch{width:34px;height:20px;}
+  .selection-topbar-toggle .switch-thumb{width:16px;height:16px;}
+  .selection-topbar-toggle .switch input:checked + .switch-track .switch-thumb{transform:translateX(14px);}
   .selection-clear-pill{
-    position:absolute;top:10px;right:10px;z-index:25;
     padding:7px 16px;border-radius:999px;
-    background:rgba(20,20,24,.7);border:1px solid rgba(255,255,255,.3);
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);
     color:#fff;font-size:12px;font-weight:600;
   }
-  .selection-clear-pill[hidden]{display:none;}
   .crop-rect{
     position:absolute;pointer-events:none;
     border:1px solid rgba(255,255,255,.9);
@@ -710,6 +708,21 @@
   </div>
 </header>
 
+<!-- Sits right under the header, spanning the top of the image area — a
+     normal-flow bar rather than something floated over the photo itself.
+     Shown whenever a selection exists, independent of which menu (if any)
+     is open, since 선택 is only one of several menus that can be active. -->
+<div class="selection-topbar" id="selectionTopbar" hidden>
+  <div class="selection-topbar-toggle">
+    <span>선택 영역 표시</span>
+    <label class="switch">
+      <input type="checkbox" id="showSelOverlay" checked>
+      <span class="switch-track"><span class="switch-thumb"></span></span>
+    </label>
+  </div>
+  <button type="button" class="selection-clear-pill" id="clearSelFloatBtn">선택 해제</button>
+</div>
+
 <div class="layout">
   <div class="stage-wrap" id="stageWrap">
     <div class="empty-state" id="emptyState">
@@ -786,19 +799,6 @@
           </label>
         </span>
       </div>
-      <!-- Floats over the image regardless of which menu (if any) is open —
-           only whether a selection actually exists matters. Hidden whenever
-           크롭 is active too, since that reuses this same top-left/top-right
-           corner for its own controls (see .crop-autozoom-toggle above/
-           .selection-clear-pill below) and the two modes never overlap. -->
-      <div class="selection-float-toggle" id="selectionOverlayWrap" hidden>
-        <span>선택 영역 표시</span>
-        <label class="switch">
-          <input type="checkbox" id="showSelOverlay" checked>
-          <span class="switch-track"><span class="switch-thumb"></span></span>
-        </label>
-      </div>
-      <button type="button" class="selection-clear-pill" id="clearSelFloatBtn" hidden>선택 해제</button>
     </div>
     <div class="layer-panel collapsed" id="layerPanel">
       <div class="layer-panel-header">
@@ -2231,7 +2231,7 @@
 
   // ---------- Selection overlay rendering (Photoshop-style marching ants) ----------
   const showSelOverlayChk = document.getElementById('showSelOverlay');
-  const selectionOverlayWrap = document.getElementById('selectionOverlayWrap');
+  const selectionTopbar = document.getElementById('selectionTopbar');
   const clearSelFloatBtn = document.getElementById('clearSelFloatBtn');
 
   // Traces the mask's alpha boundary (thresholded at 50%) into one or more
@@ -2312,8 +2312,7 @@
   }
   function updateSelectionFloatUI(){
     const show = hasSelection && !cropModeActive;
-    selectionOverlayWrap.hidden = !show;
-    clearSelFloatBtn.hidden = !show;
+    selectionTopbar.hidden = !show;
     const animating = show && showSelOverlayChk.checked;
     if(animating && !antsRAF) antsRAF = requestAnimationFrame(stepAnts);
     else if(!animating && antsRAF){ cancelAnimationFrame(antsRAF); antsRAF = null; }
