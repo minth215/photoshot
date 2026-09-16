@@ -69,16 +69,26 @@
   .header-crop-size{grid-column:2;display:none;justify-content:center;align-items:center;font-family:var(--mono);font-size:13px;color:var(--accent);white-space:nowrap;}
   .header-draw-actions{grid-column:2;display:none;gap:8px;justify-content:center;}
   body.draw-editing .header-draw-actions{display:flex;}
-  .header-close{grid-column:3;display:flex;justify-content:flex-end;}
-  .iconbtn{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;}
+  /* Every header button is icon-only with no background at all, in any
+     state — enabled/disabled is shown purely by icon color (white/gray),
+     and pressing one never darkens a background, only dims the icon a
+     shade back toward gray as press feedback. .active (a toggle currently
+     open, e.g. the layer panel button) gets the accent color instead. */
+  .iconbtn{
+    width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+    background:transparent;border:none;color:var(--text-dim);
+  }
   .iconbtn svg{width:18px;height:18px;}
-  .iconbtn.close-btn:hover:not(:disabled){background:rgba(226,114,91,.15);border-color:var(--danger);color:var(--danger);}
+  .iconbtn:not(:disabled){color:var(--text);}
+  .iconbtn:hover:not(:disabled),
+  .iconbtn:active:not(:disabled){background:transparent;}
+  .iconbtn:active:not(:disabled){color:var(--text-dim);}
+  .iconbtn.active{color:var(--accent);}
   .menu-cancel,.menu-apply{display:none;}
   body.editing-mode .header-actions,
-  body.editing-mode .header-close .iconbtn{display:none;}
+  body.editing-mode #closeBtn{display:none;}
   body.editing-mode .menu-cancel,
   body.editing-mode .menu-apply{display:inline-flex;}
-  body.editing-mode .header-close{grid-column:3;display:flex;justify-content:flex-end;}
   body.crop-editing .header-crop-size{display:flex;}
   /* 프로필 사진 자동화 모드: the square crop this forces has no escape hatch —
      no 취소, no other ratio, no switching to a different menu — until 적용
@@ -392,29 +402,18 @@
   }
   #urlImportError{color:#ff6b6b;text-align:left;margin:0;}
 
-  /* ---------- Layers (bookmark tab + flyout panel) ---------- */
-  .layer-tab-btn{
-    position:absolute;top:14px;right:0;z-index:31;
-    width:44px;height:38px;padding:0;
-    display:flex;align-items:center;justify-content:center;
-    background:var(--panel-2);border:1px solid var(--line);border-right:none;
-    border-radius:8px 0 0 8px;color:var(--text);
-    box-shadow:-2px 2px 8px rgba(0,0,0,.35);
-  }
-  .layer-tab-btn svg{width:19px;height:19px;}
-  .layer-tab-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
+  /* ---------- Layers (header button + flyout panel) ----------
+     The toggle button itself now lives in the header (styled as a plain
+     .iconbtn, see toggleLayerPanel) — only .layer-panel still needs its
+     own positioning here, floating below the header's right edge. */
   .layer-panel{
-    position:absolute;top:58px;right:0;z-index:30;
+    position:absolute;top:10px;right:0;z-index:30;
     width:250px;max-width:calc(100% - 12px);max-height:min(60vh,420px);
     display:flex;flex-direction:column;overflow:hidden;
     background:var(--panel);border:1px solid var(--line);border-radius:8px;
     box-shadow:-2px 4px 16px rgba(0,0,0,.45);
   }
   .layer-panel.collapsed{display:none;}
-  /* While open (floating, mobile), the panel grows up into the bookmark
-     tab's own spot instead of leaving it empty above — the bookmark itself
-     hides via JS at the same time (see toggleLayerPanel). */
-  .layer-panel:not(.collapsed):not(.docked){top:14px;}
   .layer-panel-header{padding:9px 8px 9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
   .layer-add-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-add-btn:hover{color:var(--accent);background:rgba(79,209,197,.12);}
@@ -629,6 +628,9 @@
 <header>
   <input type="file" id="fileInput" accept="image/*">
   <div class="header-side header-side-left">
+    <button id="closeBtn" class="iconbtn" disabled type="button" title="닫기" aria-label="닫기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+    </button>
     <button id="menuCancelBtn" class="menu-cancel" type="button">취소</button>
   </div>
   <div class="header-actions">
@@ -638,7 +640,7 @@
     <button id="resetBtn" class="iconbtn" disabled type="button" title="되돌리기" aria-label="되돌리기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
     </button>
-    <button id="downloadBtn" class="iconbtn primary" disabled type="button" title="다운로드" aria-label="다운로드">
+    <button id="downloadBtn" class="iconbtn" disabled type="button" title="다운로드" aria-label="다운로드">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </button>
   </div>
@@ -651,11 +653,11 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg>
     </button>
   </div>
-  <div class="header-close header-side-right">
-    <button id="closeBtn" class="iconbtn close-btn" disabled type="button" title="닫기" aria-label="닫기">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
-    </button>
+  <div class="header-side header-side-right">
     <button id="menuApplyBtn" class="menu-apply primary" type="button">적용</button>
+    <button id="layerToggleBtn" class="iconbtn layer-tab-btn" type="button" title="레이어" aria-label="레이어" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 21 7 12 12 3 7"/><polyline points="3 12 12 17 21 12"/><polyline points="3 17 12 22 21 17"/></svg>
+    </button>
   </div>
 </header>
 
@@ -729,9 +731,6 @@
         </label>
       </div>
     </div>
-    <button id="layerToggleBtn" class="layer-tab-btn" type="button" title="레이어" aria-label="레이어" style="display:none;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 21 7 12 12 3 7"/><polyline points="3 12 12 17 21 12"/><polyline points="3 17 12 22 21 17"/></svg>
-    </button>
     <div class="layer-panel collapsed" id="layerPanel">
       <div class="layer-panel-header">
         <span id="layerPanelHeaderLabel">레이어</span>
@@ -753,7 +752,7 @@
       </button>
       <button class="tab-btn" type="button" data-target="group-resize">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-        <span>사이즈 조절</span>
+        <span>리사이즈</span>
       </button>
       <button class="tab-btn" type="button" data-target="group-effects">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>
@@ -777,7 +776,7 @@
       </button>
       <button class="tab-btn" type="button" data-target="group-selection">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
-        <span>영역 선택</span>
+        <span>선택</span>
       </button>
       <button class="tab-btn" type="button" data-target="group-bgremove">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
@@ -816,7 +815,7 @@
     </details>
 
     <details class="group collapsed" id="group-resize" open>
-      <summary>사이즈 조절</summary>
+      <summary>리사이즈</summary>
       <div class="group-body">
         <div class="two-col">
           <label class="field"><span class="row"><span>너비(px)</span></span>
@@ -987,7 +986,7 @@
     </details>
 
     <details class="group collapsed" id="group-selection" open>
-      <summary>영역 선택</summary>
+      <summary>선택</summary>
       <div class="group-body">
         <div class="toolrow">
           <button class="toolbtn" data-tool="lasso" title="올가미로 영역을 자유롭게 그려 선택합니다">올가미</button>
@@ -1106,16 +1105,19 @@
   const desktopMedia = window.matchMedia('(min-width: 861px)');
   function isDesktopLayout(){ return desktopMedia.matches; }
   // On desktop the layer panel lives permanently at the bottom of the right
-  // sidebar (Photoshop-style) instead of behind the floating bookmark toggle;
-  // on mobile it stays exactly where it always was. The same DOM node moves
-  // between the two spots rather than duplicating the panel/list markup.
+  // sidebar (Photoshop-style) instead of behind the header's floating
+  // toggle button; on mobile it stays exactly where it always was. The same
+  // DOM node moves between the two spots rather than duplicating the
+  // panel/list markup. Appended directly to stageWrap (rather than anchored
+  // next to layerToggleBtn) since the toggle button itself now lives in the
+  // header, a different container than the panel's own positioned ancestor.
   function syncLayerPanelDock(){
     if(isDesktopLayout()){
       if(layerPanel.parentElement!==sidePanel) sidePanel.appendChild(layerPanel);
       layerPanel.classList.add('docked');
       layerPanel.classList.remove('collapsed');
     } else {
-      if(layerPanel.parentElement!==stageWrap) layerToggleBtn.insertAdjacentElement('afterend', layerPanel);
+      if(layerPanel.parentElement!==stageWrap) stageWrap.appendChild(layerPanel);
       layerPanel.classList.remove('docked');
     }
   }
@@ -1555,18 +1557,13 @@
   function toggleLayerPanel(){
     layerPanel.classList.toggle('collapsed');
     const isOpen = !layerPanel.classList.contains('collapsed');
+    // Stays visible in the header either way — .active just recolors its
+    // icon (see .iconbtn.active) to show the panel is currently open.
     layerToggleBtn.classList.toggle('active', isOpen);
-    // The bookmark tab hides while the panel is open — the panel's own CSS
-    // grows up into the space it left behind (see .layer-panel:not(.collapsed)).
-    // Desktop keeps the bookmark permanently hidden via its own !important
-    // rule regardless of this.
-    layerToggleBtn.style.display = isOpen ? 'none' : 'flex';
   }
   layerToggleBtn.addEventListener('click', toggleLayerPanel);
-  // On mobile the bookmark tab hides while the panel is open (see the
-  // .layer-tab-btn CSS rule) — the panel grows up into the space it left
-  // behind, and clicking anywhere on its header row (except the + button)
-  // becomes the way to collapse it again.
+  // Clicking anywhere on the panel's own header row (except the + button)
+  // is a second way to collapse it again.
   document.querySelector('.layer-panel-header').addEventListener('click', e=>{
     if(e.target.closest('#addLayerBtn')) return;
     toggleLayerPanel();
