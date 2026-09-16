@@ -173,6 +173,15 @@
   .crop-autozoom-toggle .switch{width:34px;height:20px;}
   .crop-autozoom-toggle .switch-thumb{width:16px;height:16px;}
   .crop-autozoom-toggle .switch input:checked + .switch-track .switch-thumb{transform:translateX(14px);}
+  /* 원형 틀 toggle sits inside the same top-left overlay, to the right of
+     자동 확대 — a second flex group so it gets its own 6px gap from the
+     first switch via the parent's `gap`, shown only while 정방형 (1:1) is
+     the active ratio. The [hidden] rule is needed because our own
+     display:flex here otherwise outranks the browser's default
+     [hidden]{display:none} (author rules beat UA-origin ones regardless
+     of specificity, as .url-import-back hit earlier in this project). */
+  .crop-autozoom-toggle-group{display:flex;align-items:center;gap:6px;}
+  .crop-autozoom-toggle-group[hidden]{display:none;}
   .crop-rect{
     position:absolute;pointer-events:none;
     border:1px solid rgba(255,255,255,.9);
@@ -741,6 +750,13 @@
           <input type="checkbox" id="cropAutoZoomToggle" checked>
           <span class="switch-track"><span class="switch-thumb"></span></span>
         </label>
+        <span class="crop-autozoom-toggle-group" id="circleCropRow" hidden>
+          <span>원형 틀</span>
+          <label class="switch">
+            <input type="checkbox" id="circleCropToggle">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+          </label>
+        </span>
       </div>
     </div>
     <div class="layer-panel collapsed" id="layerPanel">
@@ -804,17 +820,10 @@
         <div class="ratio-row">
           <button class="ratio-btn active" type="button" data-ratio="free">자유</button>
           <button class="ratio-btn" type="button" data-ratio="original">원본 비율</button>
-          <button class="ratio-btn" type="button" data-ratio="1:1">정사각형</button>
+          <button class="ratio-btn" type="button" data-ratio="1:1">정방형</button>
           <button class="ratio-btn" type="button" data-ratio="3:4">3:4</button>
           <button class="ratio-btn" type="button" data-ratio="3:2">3:2</button>
           <button class="ratio-btn" type="button" data-ratio="16:9">16:9</button>
-        </div>
-        <div class="checkline" id="circleCropRow" hidden>
-          <span>원형 크롭 미리보기</span>
-          <label class="switch">
-            <input type="checkbox" id="circleCropToggle">
-            <span class="switch-track"><span class="switch-thumb"></span></span>
-          </label>
         </div>
         <div class="rotate-wrap">
           <div class="rotate-value" id="rotateValue">0°</div>
