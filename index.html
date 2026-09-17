@@ -3093,11 +3093,10 @@
   // color-dodge/color-burn, same as layer blend modes elsewhere in the app).
   // 원형/사각형 branches are byte-for-byte the pre-existing 그리기 behavior;
   // 별/스프레이 are the new shapes, added alongside them.
-  function stampBrush(pctx, x, y, shape, size, hardness, alpha, rgb, compositeOp){
+  function stampBrush(pctx, x, y, shape, size, hardness, alpha, rgb){
     const r = size/2;
     const [rr,gg,bb] = rgb;
     pctx.save();
-    pctx.globalCompositeOperation = compositeOp || 'source-over';
     pctx.globalAlpha = alpha;
     if(shape==='square'){
       pctx.fillStyle = `rgb(${rr},${gg},${bb})`;
@@ -3180,7 +3179,7 @@
     const size = parseInt(drawSizeInput.value,10);
     const hardness = parseInt(drawHardnessInput.value,10)/100;
     const exposure = parseInt(drawExposureInput.value,10)/100;
-    stampBrush(layer.ctx, x, y, drawBrushType, size, hardness, exposure, hexToRgb(drawColorInput.value), 'source-over');
+    stampBrush(layer.ctx, x, y, drawBrushType, size, hardness, exposure, hexToRgb(drawColorInput.value));
     compositeLayers();
   }
   function paintDrawLine(x1,y1,x2,y2){
@@ -3215,10 +3214,27 @@
   }
 
   // ---------- Burn/Dodge tool (번/닷지): same incremental brush-stamp model
-  // as 그리기 above, but stamps white/black through the browser's native
-  // color-dodge/color-burn composite operations (the exact same blend math
-  // this app already uses for layer blend modes) instead of painting a flat
-  // color — applied straight onto the active layer, no new layer created.
+  // as 그리기 above, but instead of painting a flat color it manually blends
+  // each pixel under the brush toward white/black using the standard
+  // Color Dodge/Color Burn formulas (per the W3C compositing spec) — applied
+  // straight onto the active layer, no new layer created.
+  //
+  // This is NOT done via the browser's native color-dodge/color-burn
+  // globalCompositeOperation (like layer blend modes elsewhere in this app
+  // use) — that would mean stamping an actual white/black PIXEL as the
+  // blend's source color, which forces the spec's Cs>=1 (dodge) / Cs<=0
+  // (burn) branch on every single dab, collapsing the formula to a flat
+  // "B=1" or "B=0" regardless of the pixel's own tone. The dab's alpha then
+  // only controls the ordinary over-mix with the backdrop, i.e. plain linear
+  // interpolation toward pure white/black — exactly the "acts like a
+  // white/black brush" bug this replaced. The fix keeps the brush's own
+  // alpha (from stampBrush's shape/hardness falloff) as the spatial coverage
+  // (how much of the dab touches each pixel) and uses EXPOSURE as the
+  // blend's Cs input instead (dodge: Cs=exposure; burn: Cs=1-exposure, since
+  // the spec's burn convention has Cs=1 mean "no effect") — that keeps the
+  // formula's actual tone-dependent curve intact, so a dab lightens/darkens
+  // by an amount that depends on the pixel's own existing brightness instead
+  // of just sliding it toward an extreme.
   const dbSizeInput = document.getElementById('dbSize');
   const dbHardnessInput = document.getElementById('dbHardness');
   const dbExposureInput = document.getElementById('dbExposure');
@@ -3243,6 +3259,17 @@
   dbHardnessInput.addEventListener('input', ()=>{ document.getElementById('dbHardnessVal').textContent = dbHardnessInput.value; });
   dbExposureInput.addEventListener('input', ()=>{ document.getElementById('dbExposureVal').textContent = dbExposureInput.value; });
 
+  // A scratch canvas reused across dabs (resized only when the brush's own
+  // footprint changes) to avoid allocating a new canvas on every dab —
+  // stampBrush draws the shape's alpha falloff onto it at full strength
+  // (alpha=1, opaque white), which is then read back as the dab's per-pixel
+  // spatial coverage mask, entirely separate from the exposure-driven blend.
+  const dbMaskCanvas = document.createElement('canvas');
+  const dbMaskCtx = dbMaskCanvas.getContext('2d', {willReadFrequently:true});
+  function brushMaskDim(size){
+    // Padding covers the star shape's blur filter bleeding past its own r.
+    return Math.max(1, Math.ceil(size + 8));
+  }
   // Reuses 그리기's drawingActive/lastDrawPos — the two brush tools are
   // never active at once, so one pair of "is a stroke in progress" flags
   // covers both.
@@ -3254,9 +3281,47 @@
     const size = parseInt(dbSizeInput.value,10);
     const hardness = parseInt(dbHardnessInput.value,10)/100;
     const exposure = parseInt(dbExposureInput.value,10)/100;
-    const compositeOp = currentTool==='db-burn' ? 'color-burn' : 'color-dodge';
-    const rgb = currentTool==='db-burn' ? [0,0,0] : [255,255,255];
-    stampBrush(layer.ctx, x, y, dbBrushType, size, hardness, exposure, rgb, compositeOp);
+    const isBurn = currentTool==='db-burn';
+
+    const dim = brushMaskDim(size);
+    if(dbMaskCanvas.width!==dim || dbMaskCanvas.height!==dim){
+      dbMaskCanvas.width = dim; dbMaskCanvas.height = dim;
+    } else {
+      dbMaskCtx.clearRect(0,0,dim,dim);
+    }
+    stampBrush(dbMaskCtx, dim/2, dim/2, dbBrushType, size, hardness, 1, [255,255,255]);
+
+    const w = layer.canvas.width, h = layer.canvas.height;
+    const left = Math.round(x - dim/2), top = Math.round(y - dim/2);
+    const sx = Math.max(0, left), sy = Math.max(0, top);
+    const ex = Math.min(w, left+dim), ey = Math.min(h, top+dim);
+    const rw = ex-sx, rh = ey-sy;
+    if(rw<=0 || rh<=0) return;
+
+    const maskData = dbMaskCtx.getImageData(sx-left, sy-top, rw, rh).data;
+    const lctx = layer.ctx;
+    const region = lctx.getImageData(sx, sy, rw, rh);
+    const data = region.data;
+    // See the comment above this section for why Cs comes from exposure
+    // (not the mask) and burn's Cs is inverted relative to dodge's.
+    const cs = isBurn ? (1-exposure) : exposure;
+    for(let i=0;i<data.length;i+=4){
+      const as = maskData[i+3]/255;
+      if(as<=0) continue;
+      for(let c=0;c<3;c++){
+        const cb = data[i+c]/255;
+        let b;
+        if(isBurn){
+          b = cb>=1 ? 1 : (cs<=0 ? 0 : 1-Math.min(1,(1-cb)/cs));
+        } else {
+          b = cb<=0 ? 0 : (cs>=1 ? 1 : Math.min(1, cb/(1-cs)));
+        }
+        data[i+c] = Math.round((as*b + (1-as)*cb)*255);
+      }
+      // Alpha channel is left untouched — dodge/burn only ever changes tone,
+      // never transparency.
+    }
+    lctx.putImageData(region, sx, sy);
     compositeLayers();
   }
   function paintDodgeBurnLine(x1,y1,x2,y2){
