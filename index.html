@@ -254,13 +254,18 @@
   }
   .empty-state-actions .ghost{background:#000;border-color:#000;color:var(--text);}
   .empty-state-actions .ghost:hover{background:#1a1a1a;}
-  /* Decorative elements only used by the mobile first-page design below —
-     hidden here so the desktop empty state (above) is untouched. */
+  /* Decorative elements only used by the first-page design below — hidden
+     by default, shown via the higher-specificity body.no-image rules there
+     (which apply at every width, not just mobile). */
   .empty-state-glow,.empty-state-logo,.empty-state-cat,.empty-state-spacer{display:none;}
   .btn-icon{display:none;}
 
-  /* ---------- Mobile first-page design (design-file mockup) ---------- */
-  @media (max-width:860px){
+  /* ---------- First-page design (design-file mockup) ----------
+     Was mobile-only; now applies at every width so desktop's empty state
+     matches exactly — same gradient/glow buttons, same clickable cat that
+     toggles 프로필 사진 자동화 모드. .empty-state-bottom/.empty-state-cat-row
+     get an extra max-width below (desktop-only) so the column doesn't
+     stretch edge-to-edge on a wide screen the way it does on a phone. */
     body.no-image #stageWrap{align-items:stretch;justify-content:stretch;padding:0;}
     body.no-image .empty-state{
       width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
@@ -285,7 +290,7 @@
        keyboard leaves only a little room, this fixed gap ends up looking
        far too big under the input box relative to what's left. */
     body.no-image .empty-state-bottom{
-      width:100%;padding-bottom:min(56px,calc(var(--app-height,800px)*.05));
+      width:100%;max-width:420px;padding-bottom:min(56px,calc(var(--app-height,800px)*.05));
       position:relative;z-index:1;
     }
     /* Positioning context for the "<" back button and the automation-mode
@@ -294,7 +299,7 @@
        neither one can shift the cat's own position (X or Y) depending on
        whether the URL-import form is open. */
     body.no-image .empty-state-cat-row{
-      position:relative;width:100%;
+      position:relative;width:100%;max-width:420px;
     }
     body.no-image .empty-state-cat{
       display:flex;justify-content:flex-end;padding-right:26px;margin-bottom:0;
@@ -417,22 +422,9 @@
       color:rgba(245,244,248,.3);opacity:1;
     }
     body.no-image .url-import-submit:not(:disabled){color:#3ddc97;}
-  }
   .url-import-form:not([hidden]){
     display:flex;flex-direction:column;gap:8px;margin-top:10px;
     width:260px;max-width:80vw;margin-left:auto;margin-right:auto;
-  }
-  /* On desktop the cat itself stays hidden (see .empty-state-cat above),
-     so this row's only visible content is the "<" back button when the
-     URL-import form is open — sized/centered to match the form's own
-     260px column and scoped with :has() so it takes up no space at all
-     while the button is hidden (form closed). Explicitly gated to the
-     desktop breakpoint (an ID inside :has() gives this enough specificity
-     to otherwise leak into the mobile layout's own rules above). */
-  @media (min-width:861px){
-    .empty-state-cat-row:has(#urlImportBack:not([hidden])){
-      display:flex;align-items:center;width:260px;max-width:80vw;margin:10px auto 0;
-    }
   }
   .url-import-back{
     width:auto;height:auto;padding:0;border:none;flex-shrink:0;gap:3px;
