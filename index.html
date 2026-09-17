@@ -507,11 +507,35 @@
     background-color:#fff;
   }
   .layer-name{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .layer-name-input{
+    font-size:12px;color:var(--text);background:var(--bg);
+    border:1px solid var(--accent);border-radius:4px;padding:2px 5px;width:100%;
+  }
   .layer-icon-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-icon-btn svg{width:16px;height:16px;}
   .layer-icon-btn.off{color:var(--text-dim);opacity:.4;}
   .layer-icon-btn.on{color:var(--accent);opacity:1;}
   input[type=color]{width:100%;height:34px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:5px;cursor:pointer;}
+  /* Layer row context menu (이름 변경/복제/삭제) — position:fixed and placed
+     by JS at either the row's own position (tapping an already-selected
+     row again, mobile/iPad/desktop alike) or the cursor (PC right-click on
+     ANY row). Not gated by viewport width: both open paths are wired
+     unconditionally so an iPad showing the desktop layout still gets the
+     tap-based path instead of needing a real right-click. */
+  .layer-ctx-menu{
+    position:fixed;z-index:60;min-width:130px;
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.5);
+    padding:4px;display:flex;flex-direction:column;gap:1px;
+  }
+  .layer-ctx-menu[hidden]{display:none;}
+  .layer-ctx-item{
+    text-align:left;padding:9px 12px;border-radius:5px;
+    background:transparent;border:none;font-size:13px;color:var(--text);
+  }
+  .layer-ctx-item:hover{background:var(--panel-2);}
+  .layer-ctx-item.danger{color:var(--danger);}
+  .layer-ctx-item.danger:hover{background:rgba(226,114,91,.12);}
 
   aside{
     width:320px;flex-shrink:0;
@@ -905,6 +929,12 @@
         </div>
       </div>
       <div class="layer-list" id="layerList"></div>
+    </div>
+    <div class="layer-ctx-menu" id="layerCtxMenu" hidden>
+      <button type="button" class="layer-ctx-item" data-action="edit" id="layerCtxEdit" hidden>편집</button>
+      <button type="button" class="layer-ctx-item" data-action="rename">이름 변경</button>
+      <button type="button" class="layer-ctx-item" data-action="duplicate">복제</button>
+      <button type="button" class="layer-ctx-item danger" data-action="delete">삭제</button>
     </div>
   </div>
 
@@ -1604,11 +1634,20 @@
         // — otherwise finishing a drag would select the dragged row itself.
         if(row._justDragged){ row._justDragged = false; return; }
         if(e.target.closest('.layer-icon-btn')) return;
+        // Tapping a row that's ALREADY the active layer opens the
+        // rename/복제/삭제 menu instead of re-selecting it — same trigger
+        // on mobile, iPad (even under the desktop CSS layout), and desktop
+        // mouse clicks alike, since nothing here checks device or width.
+        if(layer.id===activeLayerId){
+          toggleLayerCtxMenuForRow(layer, row);
+          return;
+        }
+        closeLayerCtxMenu();
         // Picking a different layer while a 선택색상/레벨/곡선 session is open
         // acts like pressing 취소 first — prompting only if something was
         // actually changed — rather than leaving that session dangling open
         // underneath the newly-selected layer.
-        if(layer.id!==activeLayerId && ADJUSTMENT_MENU_IDS.has(activeMenuId)){
+        if(ADJUSTMENT_MENU_IDS.has(activeMenuId)){
           if(sessionDirty && !window.confirm('변경 사항을 삭제할까요?')) return;
           cancelActiveMenu(false);
         }
@@ -1617,6 +1656,13 @@
           const menuId = ADJUSTMENT_MENU_ID[layer.adjustmentType];
           if(menuId) openMenuFromLayerRow(menuId);
         }
+      });
+      // PC: right-click ANY row (not just the currently-active one) for the
+      // same rename/복제/삭제 menu — independent of the tap-to-reopen path
+      // above, so a mouse user can get there either way.
+      row.addEventListener('contextmenu', e=>{
+        e.preventDefault();
+        openLayerCtxMenuAt(layer, e.clientX, e.clientY, false);
       });
       eyeBtn.addEventListener('click', e=>{
         e.stopPropagation();
@@ -1637,6 +1683,179 @@
     }
     updateLayerPanelControls();
   }
+  // ---------- Layer row context menu (이름 변경/복제/삭제) ----------
+  const layerCtxMenu = document.getElementById('layerCtxMenu');
+  let ctxMenuLayerId = null;
+  function closeLayerCtxMenu(){
+    layerCtxMenu.hidden = true;
+    ctxMenuLayerId = null;
+  }
+  // x,y is the point the menu should hug: its LEFT edge when anchorRight is
+  // false (PC right-click — menu grows rightward from the cursor, like a
+  // native context menu), or its RIGHT edge when true (tap-to-reopen on an
+  // already-selected row — menu grows leftward off the row, staying clear
+  // of the layer panel itself). Either way the result is clamped back
+  // inside the viewport so it can never render off-screen.
+  function openLayerCtxMenuAt(layer, x, y, anchorRight){
+    ctxMenuLayerId = layer.id;
+    // 편집 only makes sense for 선택색상/레벨/곡선 layers — this is now the
+    // only way to reopen their property editor, since tapping an
+    // already-active row opens this menu instead of the editor directly.
+    document.getElementById('layerCtxEdit').hidden = !layer.adjustmentType;
+    layerCtxMenu.hidden = false;
+    const rect = layerCtxMenu.getBoundingClientRect();
+    let left = anchorRight ? x - rect.width : x;
+    let top = y;
+    left = Math.max(4, Math.min(left, window.innerWidth - rect.width - 4));
+    top = Math.max(4, Math.min(top, window.innerHeight - rect.height - 4));
+    layerCtxMenu.style.left = left+'px';
+    layerCtxMenu.style.top = top+'px';
+  }
+  function toggleLayerCtxMenuForRow(layer, row){
+    if(!layerCtxMenu.hidden && ctxMenuLayerId===layer.id){
+      closeLayerCtxMenu();
+      return;
+    }
+    const r = row.getBoundingClientRect();
+    openLayerCtxMenuAt(layer, r.left, r.top, true);
+  }
+  document.addEventListener('pointerdown', e=>{
+    if(layerCtxMenu.hidden || layerCtxMenu.contains(e.target)) return;
+    // pointerdown fires before the row's own 'click' handler — closing here
+    // when the click target is the SAME row the open menu belongs to would
+    // leave that handler's own toggle-check finding it already closed and
+    // reopening it right back, turning a tap-to-close into a no-op. Leave
+    // that specific case to the row's click handler instead; every other
+    // outside click (a different row, the canvas, ...) still closes here.
+    const row = e.target.closest('.layer-row');
+    if(row && Number(row.dataset.layerId)===ctxMenuLayerId) return;
+    closeLayerCtxMenu();
+  });
+  layerList.addEventListener('scroll', closeLayerCtxMenu);
+  window.addEventListener('resize', closeLayerCtxMenu);
+  function cloneCanvas(src){
+    const c = document.createElement('canvas');
+    c.width = src.width; c.height = src.height;
+    c.getContext('2d').drawImage(src,0,0);
+    return c;
+  }
+  // Swaps the row's name span for a text input in place (no renderLayerPanel
+  // call until commit/cancel, so the input isn't torn down mid-edit) —
+  // focusing it is what raises the on-screen keyboard on mobile/iPad.
+  function startLayerRename(layer, row){
+    const nameSpan = row.querySelector('.layer-name');
+    if(!nameSpan) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'layer-name-input';
+    input.value = layer.name;
+    nameSpan.replaceWith(input);
+    input.focus();
+    input.select();
+    let settled = false;
+    function commit(){
+      if(settled) return; settled = true;
+      const val = input.value.trim();
+      if(val && val!==layer.name){
+        pushUndo(snapshotState());
+        layer.name = val;
+      }
+      renderLayerPanel();
+    }
+    function cancel(){
+      if(settled) return; settled = true;
+      renderLayerPanel();
+    }
+    input.addEventListener('click', e=> e.stopPropagation());
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e=>{
+      e.stopPropagation();
+      if(e.key==='Enter'){ e.preventDefault(); input.blur(); }
+      else if(e.key==='Escape'){ e.preventDefault(); cancel(); }
+    });
+  }
+  // Inserted directly above the original (arrays are bottom-to-top, so
+  // that's the very next index) with every field copied exactly, including
+  // adjustmentType/adjustmentParams/adjustmentSourceLayerId/adjustmentMaskThumb
+  // — a duplicated 선택색상/레벨/곡선 layer keeps applying the same values,
+  // not a blank/default adjustment.
+  function duplicateLayer(layer){
+    pushUndo(snapshotState());
+    const idx = layers.indexOf(layer);
+    const {canvas, ctx:lctx} = makeLayerCanvas(mainCanvas.width, mainCanvas.height);
+    lctx.drawImage(layer.canvas, 0, 0);
+    const copy = {
+      id: nextLayerId++,
+      name: layer.name+' 사본',
+      canvas, ctx: lctx,
+      visible: layer.visible,
+      locked: layer.locked,
+      opacity: layer.opacity,
+      blendMode: layer.blendMode,
+      adjustmentType: layer.adjustmentType,
+      adjustmentParams: layer.adjustmentParams ? JSON.parse(JSON.stringify(layer.adjustmentParams)) : null,
+      adjustmentSourceLayerId: layer.adjustmentSourceLayerId,
+      adjustmentMaskThumb: layer.adjustmentMaskThumb ? cloneCanvas(layer.adjustmentMaskThumb) : null,
+    };
+    layers.splice(idx+1, 0, copy);
+    activeLayerId = copy.id;
+    compositeLayers();
+    renderLayerPanel();
+  }
+  function deleteLayer(layer){
+    if(layers.length<=1) return; // always keep at least one layer
+    pushUndo(snapshotState());
+    const idx = layers.indexOf(layer);
+    layers.splice(idx,1);
+    if(activeLayerId===layer.id){
+      const fallback = layers[Math.min(idx, layers.length-1)];
+      activeLayerId = fallback ? fallback.id : null;
+    }
+    rebuildDependentAdjustmentLayers(idx-1);
+    compositeLayers();
+    renderLayerPanel();
+    updateLockedLayerWarning();
+  }
+  layerCtxMenu.querySelectorAll('.layer-ctx-item').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      const targetId = ctxMenuLayerId;
+      closeLayerCtxMenu();
+      if(targetId==null) return;
+      // Any open menu session (크롭/리사이즈/효과/선택색상/... — not just
+      // adjustment ones) was captured via beginEdit() as a full-document
+      // snapshot that a later 취소 reverts to wholesale, layers array
+      // included. Performing a duplicate/삭제/이름 변경 while that's open,
+      // then later cancelling the session, would silently wipe the action
+      // right back out along with it — so close the session first (same
+      // confirm-if-dirty guard as switching tool bar icons: 적용 never
+      // happens implicitly, only a user-confirmed discard does).
+      if(activeMenuId){
+        cancelActiveMenu(true);
+        if(activeMenuId) return; // user declined discarding -> abort the action
+      }
+      // Re-resolved by id (not captured beforehand) since cancelActiveMenu
+      // above may have just rebuilt `layers` with fresh objects — a stale
+      // reference here would silently no-op every array lookup that uses it.
+      const layer = layers.find(l=>l.id===targetId);
+      if(!layer) return;
+      if(action==='edit'){
+        if(layer.adjustmentType){
+          selectLayer(layer.id);
+          const menuId = ADJUSTMENT_MENU_ID[layer.adjustmentType];
+          if(menuId) openMenuFromLayerRow(menuId);
+        }
+      } else if(action==='rename'){
+        const row = layerList.querySelector(`.layer-row[data-layer-id="${layer.id}"]`);
+        if(row) startLayerRename(layer, row);
+      } else if(action==='duplicate'){
+        duplicateLayer(layer);
+      } else if(action==='delete'){
+        deleteLayer(layer);
+      }
+    });
+  });
   // ---------- Layer panel controls (blend mode + opacity, Photoshop-style:
   // one shared pair at the top of the stack, editing whichever layer is
   // currently selected, instead of a repeated pair inside every row) ----------
