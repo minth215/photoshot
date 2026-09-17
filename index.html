@@ -1190,8 +1190,8 @@
       <summary>번/닷지</summary>
       <div class="group-body">
         <div class="toolrow">
-          <button class="toolbtn active" type="button" data-dbtool="dodge" title="닷지 (밝게)">닷지</button>
-          <button class="toolbtn" type="button" data-dbtool="burn" title="번 (어둡게)">번</button>
+          <button class="toolbtn active" type="button" data-dbtool="burn" title="번 (어둡게)">번</button>
+          <button class="toolbtn" type="button" data-dbtool="dodge" title="닷지 (밝게)">닷지</button>
         </div>
         <div class="ratio-row">
           <button class="ratio-btn active" type="button" data-dbbrushtype="round">원형</button>
@@ -1200,16 +1200,16 @@
           <button class="ratio-btn" type="button" data-dbbrushtype="spray">스프레이</button>
         </div>
         <label class="field">
-          <span class="row"><span>브러쉬 크기</span><span id="dbSizeVal">30</span></span>
-          <input type="range" id="dbSize" min="1" max="200" value="30">
+          <span class="row"><span>브러쉬 크기</span><span id="dbSizeVal">20</span></span>
+          <input type="range" id="dbSize" min="1" max="200" value="20">
         </label>
         <label class="field">
-          <span class="row"><span>경도</span><span id="dbHardnessVal">80</span></span>
-          <input type="range" id="dbHardness" min="0" max="100" value="80">
+          <span class="row"><span>경도</span><span id="dbHardnessVal">10</span></span>
+          <input type="range" id="dbHardness" min="0" max="100" value="10">
         </label>
         <label class="field">
-          <span class="row"><span>노출</span><span id="dbExposureVal">50</span></span>
-          <input type="range" id="dbExposure" min="1" max="100" value="50">
+          <span class="row"><span>노출</span><span id="dbExposureVal">25</span></span>
+          <input type="range" id="dbExposure" min="1" max="100" value="25">
         </label>
       </div>
     </details>
@@ -3253,7 +3253,7 @@
   const dbHardnessInput = document.getElementById('dbHardness');
   const dbExposureInput = document.getElementById('dbExposure');
   let dbBrushType = 'round';
-  let dbTool = 'dodge';
+  let dbTool = 'burn';
   document.querySelectorAll('#group-dodgeburn [data-dbbrushtype]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       document.querySelectorAll('#group-dodgeburn [data-dbbrushtype]').forEach(b=>b.classList.remove('active'));
@@ -3284,9 +3284,37 @@
     // Padding covers the star shape's blur filter bleeding past its own r.
     return Math.max(1, Math.ceil(size + 8));
   }
-  // Reuses 그리기's drawingActive/lastDrawPos — the two brush tools are
-  // never active at once, so one pair of "is a stroke in progress" flags
-  // covers both.
+  // A real brush stroke is many overlapping dabs (a dab roughly every
+  // size/4 px of travel, and a mouse/touch fires pointermove far more often
+  // than that) — re-applying the multiply/screen formula on top of its OWN
+  // last result at every single one of those dabs compounds fast: even a
+  // "gentle" 25% exposure burn, reapplied 10+ times over the same spot in
+  // one unbroken drag, multiplies down to near-black in a fraction of a
+  // second, which reads as "the brush just paints black/white" exactly like
+  // the bug this was meant to fix. Photoshop's own tool doesn't compound
+  // like that within a single stroke: dodgeburn a spot repeatedly without
+  // lifting the pointer and it approaches one dab's worth of change, not
+  // zero/max.
+  //
+  // The fix mirrors that: dbStrokeBase is a snapshot of the active layer
+  // taken once at the stroke's first dab (pointerdown) — every dab for the
+  // rest of that stroke blends from THIS frozen base, never from whatever
+  // the previous dab just wrote. dbCoverage is a same-size per-pixel "how
+  // much of this stroke's brush has this pixel seen so far" map that only
+  // ever takes the MAX across dabs (not a sum/compounded union) — so
+  // scrubbing back and forth over the same spot within one stroke converges
+  // to that pixel's peak brush alpha, then stays there for the rest of the
+  // stroke. Lifting the pointer and starting a fresh stroke resets both,
+  // which is what lets repeated separate strokes keep pushing further,
+  // exactly like the real tool.
+  let dbStrokeBase = null; // {data:Uint8ClampedArray, w, h} snapshot of the layer at stroke start
+  let dbStrokeLayerId = null;
+  let dbCoverage = null; // Uint8ClampedArray, one byte per pixel, full layer size
+  function resetDodgeBurnStroke(){
+    dbStrokeBase = null;
+    dbStrokeLayerId = null;
+    dbCoverage = null;
+  }
   function paintDodgeBurnDab(x,y){
     if(!editingSnapshot) return;
     const layer = layers.find(l=>l.id===editingSnapshot.activeLayerId);
@@ -3296,6 +3324,13 @@
     const hardness = parseInt(dbHardnessInput.value,10)/100;
     const exposure = parseInt(dbExposureInput.value,10)/100;
     const isBurn = currentTool==='db-burn';
+    const w = layer.canvas.width, h = layer.canvas.height;
+
+    if(dbStrokeBase===null || dbStrokeLayerId!==layer.id){
+      dbStrokeBase = layer.ctx.getImageData(0,0,w,h).data;
+      dbStrokeLayerId = layer.id;
+      dbCoverage = new Uint8ClampedArray(w*h);
+    }
 
     const dim = brushMaskDim(size);
     if(dbMaskCanvas.width!==dim || dbMaskCanvas.height!==dim){
@@ -3305,7 +3340,6 @@
     }
     stampBrush(dbMaskCtx, dim/2, dim/2, dbBrushType, size, hardness, 1, [255,255,255]);
 
-    const w = layer.canvas.width, h = layer.canvas.height;
     const left = Math.round(x - dim/2), top = Math.round(y - dim/2);
     const sx = Math.max(0, left), sy = Math.max(0, top);
     const ex = Math.min(w, left+dim), ey = Math.min(h, top+dim);
@@ -3313,30 +3347,45 @@
     if(rw<=0 || rh<=0) return;
 
     const maskData = dbMaskCtx.getImageData(sx-left, sy-top, rw, rh).data;
-    const lctx = layer.ctx;
-    const region = lctx.getImageData(sx, sy, rw, rh);
-    const data = region.data;
-    // Burn multiplies every channel by the same factor (hue/saturation-
-    // preserving, proportional to exposure); dodge is its screen-blend
-    // mirror. See the comment above this section for why — not the
-    // Color Dodge/Color Burn blend-mode formula.
-    for(let i=0;i<data.length;i+=4){
-      const as = maskData[i+3]/255;
-      if(as<=0) continue;
-      for(let c=0;c<3;c++){
-        const cb = data[i+c]/255;
-        let b;
-        if(isBurn){
-          b = cb*(1-exposure);
-        } else {
-          b = 1-(1-cb)*(1-exposure);
-        }
-        data[i+c] = Math.round((as*b + (1-as)*cb)*255);
+    // Fold this dab into the running per-pixel MAX coverage for the stroke.
+    for(let ry=0; ry<rh; ry++){
+      for(let rx=0; rx<rw; rx++){
+        const covIdx = (sy+ry)*w + (sx+rx);
+        const dabA = maskData[(ry*rw+rx)*4+3];
+        if(dabA>dbCoverage[covIdx]) dbCoverage[covIdx] = dabA;
       }
-      // Alpha channel is left untouched — dodge/burn only ever changes tone,
-      // never transparency.
     }
-    lctx.putImageData(region, sx, sy);
+    // Recompute this region from the STROKE'S ORIGINAL pixels + current
+    // coverage — never from whatever's currently sitting in the canvas —
+    // so repeated overlapping dabs within one stroke never compound.
+    const region = layer.ctx.createImageData(rw, rh);
+    const outData = region.data;
+    for(let ry=0; ry<rh; ry++){
+      for(let rx=0; rx<rw; rx++){
+        const px = sx+rx, py = sy+ry;
+        const baseIdx = (py*w+px)*4;
+        const outIdx = (ry*rw+rx)*4;
+        const as = dbCoverage[py*w+px]/255;
+        if(as<=0){
+          outData[outIdx]=dbStrokeBase[baseIdx]; outData[outIdx+1]=dbStrokeBase[baseIdx+1];
+          outData[outIdx+2]=dbStrokeBase[baseIdx+2]; outData[outIdx+3]=dbStrokeBase[baseIdx+3];
+          continue;
+        }
+        // Burn multiplies every channel by the same factor (hue/saturation-
+        // preserving, proportional to exposure); dodge is its screen-blend
+        // mirror. See the comment above this section for why — not the
+        // Color Dodge/Color Burn blend-mode formula.
+        for(let c=0;c<3;c++){
+          const cb = dbStrokeBase[baseIdx+c]/255;
+          const b = isBurn ? cb*(1-exposure) : 1-(1-cb)*(1-exposure);
+          outData[outIdx+c] = Math.round((as*b + (1-as)*cb)*255);
+        }
+        // Alpha channel is left untouched — dodge/burn only ever changes
+        // tone, never transparency.
+        outData[outIdx+3] = dbStrokeBase[baseIdx+3];
+      }
+    }
+    layer.ctx.putImageData(region, sx, sy);
     compositeLayers();
   }
   function paintDodgeBurnLine(x1,y1,x2,y2){
@@ -3356,11 +3405,13 @@
     commitEdit();
     strokeUndoStack = []; strokeRedoStack = [];
     updateDrawHistoryButtons();
+    resetDodgeBurnStroke();
   }
   function cancelDodgeBurnAction(){
     cancelEdit();
     strokeUndoStack = []; strokeRedoStack = [];
     updateDrawHistoryButtons();
+    resetDodgeBurnStroke();
   }
 
   // ---------- Pinch to zoom + pan + rotate (two fingers) ----------
@@ -3406,6 +3457,7 @@
     if(drawingActive && (currentTool==='draw'||currentTool==='db-dodge'||currentTool==='db-burn') && strokeUndoStack.length){
       restoreLayersFrom(strokeUndoStack.pop());
       updateDrawHistoryButtons();
+      resetDodgeBurnStroke();
     }
     pinchActive = true;
     pinchStartDist = pointerDistance();
@@ -3604,6 +3656,7 @@
     if(currentTool==='draw'||currentTool==='db-dodge'||currentTool==='db-burn'){
       drawingActive=false;
       lastDrawPos=null;
+      resetDodgeBurnStroke();
     }
     if(currentTool==='bg-add'||currentTool==='bg-sub'){
       bgPaintingActive=false;
@@ -3614,6 +3667,7 @@
     endPeek();
     drawingActive=false;
     lastDrawPos=null;
+    resetDodgeBurnStroke();
     bgPaintingActive=false;
     if(shapeSelectPointerId===e.pointerId){
       shapeSelectPointerId = null;
@@ -5246,7 +5300,7 @@
   // 크롭 is handled separately since it shows/hides the crop-frame overlay, not a tool.
   const MENU_TOOL = {
     'group-draw': 'draw',
-    'group-dodgeburn': 'db-dodge',
+    'group-dodgeburn': 'db-burn',
     'group-bgremove': 'bg-sub',
     'group-selection': 'lasso',
     'group-resize': 'none',
