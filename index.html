@@ -645,6 +645,12 @@
     /* Only that menu's control bar should remain while editing — the tab bar
        (used to pick a menu in the first place) disappears until Apply/Cancel. */
     body.editing-mode .mobile-tabbar{display:none;}
+    /* Nothing to pick a menu FOR yet on the empty state (before an image is
+       loaded) — used to be covered for free by aside#sidePanel's own
+       display:none while the tab bar still lived inside it; now that it's a
+       sibling of the stage instead (see the desktop tool bar rules), it
+       needs its own guard here. */
+    body.no-image .mobile-tabbar{display:none;}
 
     /* Panels take up real space (pushing/shrinking the image area above) instead
        of floating over the image, so opening a taller panel visibly shrinks the
