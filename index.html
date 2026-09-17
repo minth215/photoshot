@@ -670,17 +670,22 @@
        button (added in HTML) supplies the native hover tooltip instead. It
        stays visible even while a menu is open (unlike the mobile bar, which
        hides during editing-mode — see the max-width block above) so a
-       different tool can be picked at any time, exactly like a real
-       Photoshop tool bar; the click handler auto-applies whatever menu was
-       open before switching. */
+       different tool can be picked at any time — the click handler itself
+       (see the shared tabButtons wiring in JS) never auto-applies the menu
+       being left, though: switching this way always goes through the same
+       confirm-if-dirty guard as the header's own 취소 button, exactly like
+       mobile's rule that only the 적용 button itself ever commits. */
     .mobile-tabbar{
       display:flex;flex-direction:column;flex:0 0 auto;
       width:56px;padding:10px 6px;gap:4px;align-items:center;
       background:var(--panel);border-right:1px solid var(--line);
       overflow-y:auto;
     }
-    .mobile-tabbar button.tab-btn{width:40px;height:40px;padding:0;border-radius:8px;}
+    .mobile-tabbar button.tab-btn{width:40px;height:40px;padding:0;border-radius:8px;justify-content:center;}
     .mobile-tabbar button.tab-btn span{display:none;}
+    /* Icon-only active state: just the icon itself turns accent-colored,
+       no background highlight behind it. */
+    .mobile-tabbar button.tab-btn.active{background:transparent;}
 
     /* The adjustment groups get their own scrolling region (flex:1) so the
        docked layer panel can be a plain fixed-size flex item pinned at the
@@ -700,9 +705,15 @@
     }
     #sideGroups > .group > summary{display:none;}
     .layer-panel.docked{
-      position:static;flex:0 0 auto;
+      position:static;
+      /* A fixed height (not max-height) so it never grows or shrinks with
+         whichever menu's content is showing above it in #sideGroups —
+         that region absorbs all the leftover vertical space instead (see
+         its own flex:1 1 auto), keeping this panel pinned to the same
+         spot at the bottom of the sidebar regardless of what's open. */
+      flex:0 0 420px;
       margin:0;
-      width:auto;max-width:none;max-height:280px;
+      width:auto;max-width:none;height:420px;
       border-left:none;border-right:none;border-bottom:none;border-radius:0;
       border-top:1px solid var(--line);
     }
@@ -1868,7 +1879,7 @@
     document.body.classList.remove('no-image');
     emptyState.style.display='none';
     canvasHolder.style.display='block';
-    sidePanel.style.display='block';
+    sidePanel.style.removeProperty('display'); // let CSS pick flex (desktop) vs block (mobile) — see aside#sidePanel
     layerToggleBtn.style.display='flex';
     updateHistoryButtons();
     syncResizeInputs();
@@ -2239,7 +2250,7 @@
     document.body.classList.remove('no-image');
     emptyState.style.display='none';
     canvasHolder.style.display='block';
-    sidePanel.style.display='block';
+    sidePanel.style.removeProperty('display'); // let CSS pick flex (desktop) vs block (mobile) — see aside#sidePanel
     layerToggleBtn.style.display='flex';
     updateHistoryButtons();
     syncResizeInputs();
@@ -4830,24 +4841,26 @@
   // Same buttons, same handler, both layouts — only the CSS repositions and
   // restyles them (see .mobile-tabbar rules). On mobile the bar is hidden
   // the moment a menu opens (editing-mode CSS), so a tap here always means
-  // "open a fresh menu" and closing always goes through 적용/취소 first. On
-  // desktop the bar stays visible the whole time instead, Photoshop-tool-bar
-  // style, so clicking it needs the fuller logic every state can hit:
-  // clicking the already-open menu's icon applies/closes it (mirrors the old
-  // desktop accordion's "click again to close"), clicking a different one
-  // auto-applies whatever was open first, and either way the newly-picked
-  // group replaces whichever one was previously shown via .mobile-active.
+  // "open a fresh menu" and closing always goes through 적용/취소 first —
+  // this handler only ever RUNS on mobile in that state. On desktop the bar
+  // stays visible the whole time instead, so switching tools has to honor
+  // the exact same rule anyway: only the header's own 적용 button ever
+  // commits a session. Clicking a different icon while one is open goes
+  // through cancelActiveMenu(true) — the identical confirm-if-dirty prompt
+  // 취소 itself uses — and NEVER auto-applies; if the user declines the
+  // confirm, activeMenuId is still set afterward and the switch is aborted,
+  // leaving the original menu open and untouched.
   if(mobileTabBar){
     const tabButtons = mobileTabBar.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const targetEl = document.getElementById(btn.dataset.target);
         if(!targetEl) return;
-        if(btn.dataset.target===activeMenuId){
-          applyActiveMenu();
-          return;
+        if(btn.dataset.target===activeMenuId) return; // already open, nothing to do
+        if(activeMenuId){
+          cancelActiveMenu(true);
+          if(activeMenuId) return; // user declined discarding changes — stay put
         }
-        if(activeMenuId) applyActiveMenu();
         tabButtons.forEach(b=>b.classList.remove('active'));
         btn.classList.add('active');
         sideGroups.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
