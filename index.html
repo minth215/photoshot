@@ -21,8 +21,8 @@
     --line:#2c3137;
     --text:#e7e9ec;
     --text-dim:#93999f;
-    --accent:#4fd1c5;
-    --accent-dim:#2f7d76;
+    --accent:#3ddc97;
+    --accent-dim:#25845b;
     --danger:#e2725b;
     --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
@@ -446,6 +446,39 @@
   }
   #urlImportError{color:#ff6b6b;text-align:left;margin:0;}
 
+  /* Small brand mark shown in the header only on the PC empty state (see
+     below) — hidden the rest of the time since the header's usual controls
+     take that spot once an image is loaded. */
+  .header-brand{
+    display:none;font-family:'Paperlogy',-apple-system,'Apple SD Gothic Neo',sans-serif;
+    font-size:15px;font-weight:900;letter-spacing:-.5px;color:var(--text);
+  }
+  .header-brand span{color:var(--accent);}
+  body.no-image .header-brand{display:inline-block;}
+
+  /* ---------- PC empty state: unlike mobile (header/sidebar hidden
+     outright, big centered logo+glow+cat+buttons — see the mobile design
+     above), PC keeps the sidebar visible from the start — there's finally
+     room for it next to the stage — and only greys out the left tool bar,
+     which has nothing to switch to yet. The header stays too, shrunk down
+     to just the brand mark in place of its usual (all irrelevant with no
+     image loaded) buttons; the big centered logo moves there with it, so
+     the stage itself shows only the cat + the two action buttons, centered
+     instead of pinned to the bottom by the (now-hidden) spacer. ---------- */
+  @media (min-width: 861px){
+    body.no-image .empty-state-glow,
+    body.no-image .empty-state-logo,
+    body.no-image .empty-state-spacer{display:none;}
+    body.no-image .empty-state{justify-content:center;}
+    body.no-image header{display:grid;}
+    body.no-image .header-side-left > :not(.header-brand),
+    body.no-image .header-actions,
+    body.no-image .header-crop-size,
+    body.no-image .header-draw-actions,
+    body.no-image .header-side-right{display:none;}
+    body.no-image .mobile-tabbar button{pointer-events:none;opacity:.35;}
+  }
+
   /* ---------- Layers (header button + flyout panel) ----------
      The toggle button itself now lives in the header (styled as a plain
      .iconbtn, see toggleLayerPanel) — only .layer-panel still needs its
@@ -460,7 +493,7 @@
   .layer-panel.collapsed{display:none;}
   .layer-panel-header{padding:9px 8px 9px 12px;font-size:12px;font-weight:600;color:var(--text-dim);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
   .layer-add-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
-  .layer-add-btn:hover{color:var(--accent);background:rgba(79,209,197,.12);}
+  .layer-add-btn:hover{color:var(--accent);background:rgba(61,220,151,.12);}
   .layer-add-btn svg{width:17px;height:17px;}
   /* Photoshop-style: blend mode + opacity live once at the top of the
      stack, for whichever layer is currently selected, instead of a
@@ -489,7 +522,7 @@
        hold fires is scrolled manually in JS instead (see attachLayerDrag). */
     touch-action:none;
   }
-  .layer-row.selected{border-color:var(--accent);background:rgba(79,209,197,.1);}
+  .layer-row.selected{border-color:var(--accent);background:rgba(61,220,151,.1);}
   .layer-row.dragging{opacity:.55;}
   /* Same transparency checkerboard as #mainCanvas, scaled down — shows
      through wherever the thumbnail canvas itself is left unpainted (see
@@ -637,7 +670,7 @@
     color:var(--text-dim);font-size:10px;line-height:1;white-space:nowrap;
   }
   .mobile-tabbar button.tab-btn svg{width:20px;height:20px;flex-shrink:0;}
-  .mobile-tabbar button.tab-btn.active{color:var(--accent);background:rgba(79,209,197,.14);}
+  .mobile-tabbar button.tab-btn.active{color:var(--accent);background:rgba(61,220,151,.14);}
 
   @media (max-width: 860px){
     header{padding:8px 10px;column-gap:4px;}
@@ -667,6 +700,10 @@
        sibling of the stage instead (see the desktop tool bar rules), it
        needs its own guard here. */
     body.no-image .mobile-tabbar{display:none;}
+    /* PC shows the sidebar even before an image loads (see the desktop
+       block below) — mobile keeps the old behavior of hiding it entirely,
+       since its layer panel/menu controls have nothing to act on yet. */
+    body.no-image aside#sidePanel{display:none;}
 
     /* Panels take up real space (pushing/shrinking the image area above) instead
        of floating over the image, so opening a taller panel visibly shrinks the
@@ -751,6 +788,7 @@
 <header>
   <input type="file" id="fileInput" accept="image/*">
   <div class="header-side header-side-left">
+    <span class="header-brand">Photoshot<span>.</span></span>
     <button id="closeBtn" class="iconbtn" disabled type="button" title="닫기" aria-label="닫기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
     </button>
@@ -828,6 +866,10 @@
     <button class="tab-btn" type="button" data-target="group-draw" title="그리기">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
       <span>그리기</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-dodgeburn" title="번/닷지">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="20" x2="14" y2="14"/><circle cx="16" cy="8" r="5"/><path d="M16 3 A5 5 0 0 1 16 13 Z" fill="currentColor" stroke="none"/></svg>
+      <span>번/닷지</span>
     </button>
     <button class="tab-btn" type="button" data-target="group-selection" title="선택">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
@@ -937,7 +979,7 @@
     </div>
   </div>
 
-  <aside id="sidePanel" style="display:none;">
+  <aside id="sidePanel">
    <div id="sideGroups">
 
     <p class="hint locked-layer-warning" id="lockedLayerWarning" hidden>🔒 활성 레이어가 잠겨 있어 편집이 적용되지 않아요. 레이어 패널에서 잠금을 해제해주세요.</p>
@@ -1112,12 +1154,22 @@
     <details class="group collapsed" id="group-draw" open>
       <summary>그리기</summary>
       <div class="group-body">
+        <div class="toolrow">
+          <button class="toolbtn icon-toolbtn active" type="button" data-tool="draw" title="브러쉬" aria-label="브러쉬">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          </button>
+          <button class="toolbtn icon-toolbtn" type="button" data-tool="eyedrop" title="스포이드 (이미지에서 색상 추출)" aria-label="스포이드">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l4 4"/><path d="M4 20l1-4 9.5-9.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z"/><path d="M17.5 3.5a2.1 2.1 0 0 1 3 3l-1 1-3-3z"/></svg>
+          </button>
+        </div>
         <label class="field"><span class="row"><span>색상</span></span>
           <input type="color" id="drawColor" value="#ff0000">
         </label>
         <div class="ratio-row">
           <button class="ratio-btn active" type="button" data-brushtype="round">원형</button>
           <button class="ratio-btn" type="button" data-brushtype="square">사각형</button>
+          <button class="ratio-btn" type="button" data-brushtype="star">별</button>
+          <button class="ratio-btn" type="button" data-brushtype="spray">스프레이</button>
         </div>
         <label class="field">
           <span class="row"><span>브러쉬 크기</span><span id="drawSizeVal">30</span></span>
@@ -1130,6 +1182,34 @@
         <label class="field">
           <span class="row"><span>노출</span><span id="drawExposureVal">100</span></span>
           <input type="range" id="drawExposure" min="1" max="100" value="100">
+        </label>
+      </div>
+    </details>
+
+    <details class="group collapsed" id="group-dodgeburn" open>
+      <summary>번/닷지</summary>
+      <div class="group-body">
+        <div class="toolrow">
+          <button class="toolbtn active" type="button" data-dbtool="dodge" title="닷지 (밝게)">닷지</button>
+          <button class="toolbtn" type="button" data-dbtool="burn" title="번 (어둡게)">번</button>
+        </div>
+        <div class="ratio-row">
+          <button class="ratio-btn active" type="button" data-dbbrushtype="round">원형</button>
+          <button class="ratio-btn" type="button" data-dbbrushtype="square">사각형</button>
+          <button class="ratio-btn" type="button" data-dbbrushtype="star">별</button>
+          <button class="ratio-btn" type="button" data-dbbrushtype="spray">스프레이</button>
+        </div>
+        <label class="field">
+          <span class="row"><span>브러쉬 크기</span><span id="dbSizeVal">30</span></span>
+          <input type="range" id="dbSize" min="1" max="200" value="30">
+        </label>
+        <label class="field">
+          <span class="row"><span>경도</span><span id="dbHardnessVal">80</span></span>
+          <input type="range" id="dbHardness" min="0" max="100" value="80">
+        </label>
+        <label class="field">
+          <span class="row"><span>노출</span><span id="dbExposureVal">50</span></span>
+          <input type="range" id="dbExposure" min="1" max="100" value="50">
         </label>
       </div>
     </details>
@@ -1258,6 +1338,14 @@
     } else {
       if(layerPanel.parentElement!==stageWrap) stageWrap.appendChild(layerPanel);
       layerPanel.classList.remove('docked');
+      // Desktop always force-removes 'collapsed' above (permanently visible,
+      // docked) — switching back to mobile mid-session must restore it,
+      // otherwise the panel would appear stuck open with no way to close it
+      // (the mobile toggle button only ever removes 'collapsed', never adds
+      // it back on its own) and, worse, would still show on the still-empty
+      // no-image screen since nothing else on mobile guards a plain
+      // uncollapsed layer panel.
+      layerPanel.classList.add('collapsed');
     }
   }
   syncLayerPanelDock();
@@ -2276,7 +2364,7 @@
     if(projectSaveTimer){ clearTimeout(projectSaveTimer); projectSaveTimer = null; }
     document.body.classList.add('no-image');
     canvasHolder.style.display='none';
-    sidePanel.style.display='none';
+    sidePanel.style.removeProperty('display'); // let CSS pick: hidden on mobile, visible on desktop — see aside#sidePanel
     emptyState.style.display='';
     setCanvasSize(0,0);
     mainCanvas.style.width=''; mainCanvas.style.height='';
@@ -2622,7 +2710,7 @@
       octx.restore();
     }
     if(lassoPoints.length>1){
-      octx.strokeStyle='#4fd1c5'; octx.lineWidth=1.5;
+      octx.strokeStyle='#3ddc97'; octx.lineWidth=1.5;
       octx.beginPath();
       octx.moveTo(lassoPoints[0][0], lassoPoints[0][1]);
       for(let p of lassoPoints) octx.lineTo(p[0],p[1]);
@@ -2630,7 +2718,7 @@
     }
     if(shapeSelectStart && shapeSelectCurrent){
       const r = computeShapeRect(shapeSelectStart[0], shapeSelectStart[1], shapeSelectCurrent[0], shapeSelectCurrent[1], isShapeAspectLocked());
-      octx.strokeStyle='#4fd1c5'; octx.lineWidth=1.5;
+      octx.strokeStyle='#3ddc97'; octx.lineWidth=1.5;
       traceShapePath(octx, currentTool, r);
       octx.stroke();
     }
@@ -2978,8 +3066,76 @@
 
   function hexToRgb(hex){
     const m = /^#([0-9a-f]{6})$/i.exec(hex||'');
-    const n = m ? parseInt(m[1],16) : 0x4fd1c5;
+    const n = m ? parseInt(m[1],16) : 0x3ddc97;
     return [ (n>>16)&255, (n>>8)&255, n&255 ];
+  }
+  function rgbToHex(r,g,b){
+    return '#' + [r,g,b].map(v=> Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+  }
+  // 5-point star outline, centered at (cx,cy), tip pointing straight up.
+  function traceStarPath(pctx, cx, cy, outerR){
+    const innerR = outerR*0.45;
+    let rot = -Math.PI/2;
+    const step = Math.PI/5;
+    pctx.beginPath();
+    pctx.moveTo(cx+Math.cos(rot)*outerR, cy+Math.sin(rot)*outerR);
+    for(let i=0;i<5;i++){
+      rot += step;
+      pctx.lineTo(cx+Math.cos(rot)*innerR, cy+Math.sin(rot)*innerR);
+      rot += step;
+      pctx.lineTo(cx+Math.cos(rot)*outerR, cy+Math.sin(rot)*outerR);
+    }
+    pctx.closePath();
+  }
+  // Shared Photoshop-style brush stamp, used by both 그리기 and 번/닷지 — only
+  // the color and composite operation differ between painting a color and
+  // dodging/burning (white/black blended via the browser's own native
+  // color-dodge/color-burn, same as layer blend modes elsewhere in the app).
+  // 원형/사각형 branches are byte-for-byte the pre-existing 그리기 behavior;
+  // 별/스프레이 are the new shapes, added alongside them.
+  function stampBrush(pctx, x, y, shape, size, hardness, alpha, rgb, compositeOp){
+    const r = size/2;
+    const [rr,gg,bb] = rgb;
+    pctx.save();
+    pctx.globalCompositeOperation = compositeOp || 'source-over';
+    pctx.globalAlpha = alpha;
+    if(shape==='square'){
+      pctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      pctx.fillRect(x-r, y-r, size, size);
+    } else if(shape==='star'){
+      // Arbitrary-shape softness: fill the crisp path, then blur it — a hard
+      // star (hardness=1) gets no blur, a soft one blurs proportionally to size.
+      const blurPx = (1-hardness) * r * 0.6;
+      pctx.filter = blurPx>0.05 ? `blur(${blurPx}px)` : 'none';
+      pctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      traceStarPath(pctx, x, y, r);
+      pctx.fill();
+      pctx.filter = 'none';
+    } else if(shape==='spray'){
+      // Scatter a cloud of small dots instead of a solid fill — density scales
+      // with brush size, each dot's own alpha fades out past the hardness radius.
+      const dotCount = Math.max(6, Math.round(r/1.5));
+      const dotR = Math.max(0.6, size*0.025);
+      const edgeR = r*hardness;
+      pctx.fillStyle = `rgb(${rr},${gg},${bb})`;
+      for(let i=0;i<dotCount;i++){
+        const ang = Math.random()*Math.PI*2;
+        const dist = Math.random()*r;
+        const edgeFactor = dist<=edgeR ? 1 : Math.max(0, 1-(dist-edgeR)/Math.max(0.001,r-edgeR));
+        if(edgeFactor<=0) continue;
+        pctx.globalAlpha = alpha * edgeFactor * (0.5+Math.random()*0.5);
+        pctx.beginPath();
+        pctx.arc(x+Math.cos(ang)*dist, y+Math.sin(ang)*dist, dotR, 0, Math.PI*2);
+        pctx.fill();
+      }
+    } else { // round
+      const grad = pctx.createRadialGradient(x,y,Math.max(0,Math.min(r*hardness,r-0.5)),x,y,r);
+      grad.addColorStop(0, `rgba(${rr},${gg},${bb},1)`);
+      grad.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
+      pctx.fillStyle = grad;
+      pctx.beginPath(); pctx.arc(x,y,r,0,Math.PI*2); pctx.fill();
+    }
+    pctx.restore();
   }
 
   // A single dedicated drawing layer is created lazily on the very first
@@ -3024,22 +3180,7 @@
     const size = parseInt(drawSizeInput.value,10);
     const hardness = parseInt(drawHardnessInput.value,10)/100;
     const exposure = parseInt(drawExposureInput.value,10)/100;
-    const r = size/2;
-    const [rr,gg,bb] = hexToRgb(drawColorInput.value);
-    const lctx = layer.ctx;
-    lctx.save();
-    lctx.globalAlpha = exposure;
-    if(drawBrushType==='square'){
-      lctx.fillStyle = `rgb(${rr},${gg},${bb})`;
-      lctx.fillRect(x-r, y-r, size, size);
-    } else {
-      const grad = lctx.createRadialGradient(x,y,Math.max(0,Math.min(r*hardness,r-0.5)),x,y,r);
-      grad.addColorStop(0, `rgba(${rr},${gg},${bb},1)`);
-      grad.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
-      lctx.fillStyle = grad;
-      lctx.beginPath(); lctx.arc(x,y,r,0,Math.PI*2); lctx.fill();
-    }
-    lctx.restore();
+    stampBrush(layer.ctx, x, y, drawBrushType, size, hardness, exposure, hexToRgb(drawColorInput.value), 'source-over');
     compositeLayers();
   }
   function paintDrawLine(x1,y1,x2,y2){
@@ -3058,6 +3199,85 @@
     updateDrawHistoryButtons();
   }
   function cancelDrawAction(){
+    cancelEdit();
+    strokeUndoStack = []; strokeRedoStack = [];
+    updateDrawHistoryButtons();
+  }
+
+  // 스포이드: samples the composited image (mainCanvas), not just the active
+  // layer, matching "what the user actually sees" — non-destructive, so it
+  // reads pixels directly rather than going through beginEdit()/sessionDirty.
+  function sampleEyedropper(x,y){
+    const px = Math.max(0, Math.min(mainCanvas.width-1, Math.floor(x)));
+    const py = Math.max(0, Math.min(mainCanvas.height-1, Math.floor(y)));
+    const [r,g,b] = ctx.getImageData(px,py,1,1).data;
+    drawColorInput.value = rgbToHex(r,g,b);
+  }
+
+  // ---------- Burn/Dodge tool (번/닷지): same incremental brush-stamp model
+  // as 그리기 above, but stamps white/black through the browser's native
+  // color-dodge/color-burn composite operations (the exact same blend math
+  // this app already uses for layer blend modes) instead of painting a flat
+  // color — applied straight onto the active layer, no new layer created.
+  const dbSizeInput = document.getElementById('dbSize');
+  const dbHardnessInput = document.getElementById('dbHardness');
+  const dbExposureInput = document.getElementById('dbExposure');
+  let dbBrushType = 'round';
+  let dbTool = 'dodge';
+  document.querySelectorAll('#group-dodgeburn [data-dbbrushtype]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#group-dodgeburn [data-dbbrushtype]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      dbBrushType = btn.dataset.dbbrushtype;
+    });
+  });
+  document.querySelectorAll('#group-dodgeburn [data-dbtool]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#group-dodgeburn [data-dbtool]').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      dbTool = btn.dataset.dbtool;
+      setTool(dbTool==='burn' ? 'db-burn' : 'db-dodge');
+    });
+  });
+  dbSizeInput.addEventListener('input', ()=>{ document.getElementById('dbSizeVal').textContent = dbSizeInput.value; });
+  dbHardnessInput.addEventListener('input', ()=>{ document.getElementById('dbHardnessVal').textContent = dbHardnessInput.value; });
+  dbExposureInput.addEventListener('input', ()=>{ document.getElementById('dbExposureVal').textContent = dbExposureInput.value; });
+
+  // Reuses 그리기's drawingActive/lastDrawPos — the two brush tools are
+  // never active at once, so one pair of "is a stroke in progress" flags
+  // covers both.
+  function paintDodgeBurnDab(x,y){
+    if(!editingSnapshot) return;
+    const layer = layers.find(l=>l.id===editingSnapshot.activeLayerId);
+    if(!layer || layer.locked) return;
+    sessionDirty = true;
+    const size = parseInt(dbSizeInput.value,10);
+    const hardness = parseInt(dbHardnessInput.value,10)/100;
+    const exposure = parseInt(dbExposureInput.value,10)/100;
+    const compositeOp = currentTool==='db-burn' ? 'color-burn' : 'color-dodge';
+    const rgb = currentTool==='db-burn' ? [0,0,0] : [255,255,255];
+    stampBrush(layer.ctx, x, y, dbBrushType, size, hardness, exposure, rgb, compositeOp);
+    compositeLayers();
+  }
+  function paintDodgeBurnLine(x1,y1,x2,y2){
+    const size = parseInt(dbSizeInput.value,10);
+    const dist = Math.hypot(x2-x1,y2-y1);
+    const step = Math.max(1, size/4);
+    const n = Math.max(1, Math.floor(dist/step));
+    for(let i=1;i<=n;i++){
+      const t = i/n;
+      paintDodgeBurnDab(x1+(x2-x1)*t, y1+(y2-y1)*t);
+    }
+  }
+  // Shares 그리기's strokeUndoStack/strokeRedoStack and header 획 실행취소/다시실행
+  // buttons — the two menus are never open at the same time, so one stack
+  // serves whichever brush tool is actually active.
+  function applyDodgeBurnAction(){
+    commitEdit();
+    strokeUndoStack = []; strokeRedoStack = [];
+    updateDrawHistoryButtons();
+  }
+  function cancelDodgeBurnAction(){
     cancelEdit();
     strokeUndoStack = []; strokeRedoStack = [];
     updateDrawHistoryButtons();
@@ -3103,7 +3323,7 @@
     endPeek(); // a second finger joining a before/after peek should zoom, not stay peeked
     // A second finger joining mid-stroke means this was a zoom/pan gesture, not
     // a drawing stroke — roll back whatever this stroke had painted so far.
-    if(drawingActive && currentTool==='draw' && strokeUndoStack.length){
+    if(drawingActive && (currentTool==='draw'||currentTool==='db-dodge'||currentTool==='db-burn') && strokeUndoStack.length){
       restoreLayersFrom(strokeUndoStack.pop());
       updateDrawHistoryButtons();
     }
@@ -3187,6 +3407,17 @@
       strokeUndoStack.push(preStroke);
       strokeRedoStack = [];
       updateDrawHistoryButtons();
+    } else if(currentTool==='db-dodge' || currentTool==='db-burn'){
+      beginEdit();
+      const preStroke = snapshotState();
+      drawingActive = true;
+      lastDrawPos = [x,y];
+      paintDodgeBurnDab(x,y);
+      strokeUndoStack.push(preStroke);
+      strokeRedoStack = [];
+      updateDrawHistoryButtons();
+    } else if(currentTool==='eyedrop'){
+      sampleEyedropper(x,y);
     } else if(currentTool==='bg-add' || currentTool==='bg-sub'){
       beginEdit();
       bgPaintingActive = true;
@@ -3216,6 +3447,13 @@
     } else if(drawingActive && currentTool==='draw' && lastDrawPos){
       paintDrawLine(lastDrawPos[0], lastDrawPos[1], x, y);
       lastDrawPos = [x,y];
+    } else if(drawingActive && (currentTool==='db-dodge'||currentTool==='db-burn') && lastDrawPos){
+      paintDodgeBurnLine(lastDrawPos[0], lastDrawPos[1], x, y);
+      lastDrawPos = [x,y];
+    } else if(currentTool==='eyedrop' && e.buttons){
+      // Live-sample while dragging, same as clicking — lets you drag around
+      // the image to preview colors before releasing.
+      sampleEyedropper(x,y);
     } else if(bgPaintingActive && (currentTool==='bg-add'||currentTool==='bg-sub')){
       paintBgMask(x,y, currentTool==='bg-sub' ? 'sub' : 'add');
     }
@@ -3283,7 +3521,7 @@
     } else if(currentTool==='lasso'){
       lassoPoints=[];
     }
-    if(currentTool==='draw'){
+    if(currentTool==='draw'||currentTool==='db-dodge'||currentTool==='db-burn'){
       drawingActive=false;
       lastDrawPos=null;
     }
@@ -4820,7 +5058,7 @@
     cctx.restore();
 
     const lut = buildLUT();
-    cctx.strokeStyle='#4fd1c5'; cctx.lineWidth=2;
+    cctx.strokeStyle='#3ddc97'; cctx.lineWidth=2;
     cctx.beginPath();
     for(let x=0;x<256;x++){
       const [sx,sy] = curveToScreen([x,lut[x]]);
@@ -4928,6 +5166,7 @@
   // 크롭 is handled separately since it shows/hides the crop-frame overlay, not a tool.
   const MENU_TOOL = {
     'group-draw': 'draw',
+    'group-dodgeburn': 'db-dodge',
     'group-bgremove': 'bg-sub',
     'group-selection': 'lasso',
     'group-resize': 'none',
@@ -4956,7 +5195,7 @@
         curvePoints = params ? JSON.parse(JSON.stringify(params.points)) : [[0,0],[255,255]];
         drawCurveEditor();
       }
-      if(id==='group-draw'){
+      if(id==='group-draw' || id==='group-dodgeburn'){
         strokeUndoStack = []; strokeRedoStack = [];
         updateDrawHistoryButtons();
       }
@@ -4979,6 +5218,7 @@
   // 적용/취소, instead of each panel having its own apply/cancel buttons.
   const MENU_SESSION = {
     'group-draw': { commit: applyDrawAction, cancel: cancelDrawAction },
+    'group-dodgeburn': { commit: applyDodgeBurnAction, cancel: cancelDodgeBurnAction },
     'group-bgremove': { commit: applyBgRemoveAction, cancel: cancelBgRemoveAction },
     'group-selection': { commit: applySelectionAction, cancel: cancelSelectionAction },
     'group-crop': { commit: applyCropAction, cancel: cancelCropAction },
@@ -4997,7 +5237,7 @@
     onMenuOpen(id);
     document.body.classList.add('editing-mode');
     document.body.classList.toggle('crop-editing', id==='group-crop');
-    document.body.classList.toggle('draw-editing', id==='group-draw');
+    document.body.classList.toggle('draw-editing', id==='group-draw' || id==='group-dodgeburn');
     updateLockedLayerWarning();
   }
   // Visually closes whichever menu is active (deactivates its mobile tab /
