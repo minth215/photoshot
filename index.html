@@ -3214,27 +3214,41 @@
   }
 
   // ---------- Burn/Dodge tool (번/닷지): same incremental brush-stamp model
-  // as 그리기 above, but instead of painting a flat color it manually blends
-  // each pixel under the brush toward white/black using the standard
-  // Color Dodge/Color Burn formulas (per the W3C compositing spec) — applied
-  // straight onto the active layer, no new layer created.
+  // as 그리기 above, but instead of painting a flat color it manually
+  // scales each pixel under the brush toward white/black — applied straight
+  // onto the active layer, no new layer created.
   //
-  // This is NOT done via the browser's native color-dodge/color-burn
-  // globalCompositeOperation (like layer blend modes elsewhere in this app
-  // use) — that would mean stamping an actual white/black PIXEL as the
-  // blend's source color, which forces the spec's Cs>=1 (dodge) / Cs<=0
-  // (burn) branch on every single dab, collapsing the formula to a flat
-  // "B=1" or "B=0" regardless of the pixel's own tone. The dab's alpha then
-  // only controls the ordinary over-mix with the backdrop, i.e. plain linear
-  // interpolation toward pure white/black — exactly the "acts like a
-  // white/black brush" bug this replaced. The fix keeps the brush's own
-  // alpha (from stampBrush's shape/hardness falloff) as the spatial coverage
-  // (how much of the dab touches each pixel) and uses EXPOSURE as the
-  // blend's Cs input instead (dodge: Cs=exposure; burn: Cs=1-exposure, since
-  // the spec's burn convention has Cs=1 mean "no effect") — that keeps the
-  // formula's actual tone-dependent curve intact, so a dab lightens/darkens
-  // by an amount that depends on the pixel's own existing brightness instead
-  // of just sliding it toward an extreme.
+  // Two things this deliberately does NOT do, both tried and rejected first:
+  // (1) The browser's native color-dodge/color-burn globalCompositeOperation
+  //     (like layer blend modes elsewhere in this app use), stamping an
+  //     actual white/black pixel as the blend's source color — that forces
+  //     the spec's Cs>=1 (dodge) / Cs<=0 (burn) branch on every dab, so the
+  //     formula collapses to flat "B=1"/"B=0" regardless of the pixel's own
+  //     tone, and the dab's alpha ends up just doing plain linear
+  //     interpolation toward pure white/black — i.e. acting like a
+  //     white/black brush.
+  // (2) The Color Dodge/Color Burn BLEND-MODE formula (from the W3C
+  //     compositing spec) applied manually per pixel with exposure fed in as
+  //     its Cs input — better than (1) but still wrong: that formula is
+  //     extremely non-linear per channel (its slope explodes as Cb
+  //     approaches the burned-toward extreme), so at a LOW exposure it can
+  //     still swing a mid-tone pixel hard, and — critically — each of the
+  //     three channels swings by a different amount depending on its own
+  //     starting value, visibly shifting the pixel's hue/saturation instead
+  //     of just its brightness (Photoshop's own Dodge/Burn TOOL is not the
+  //     same thing as its Color Dodge/Color Burn BLEND MODE, despite the
+  //     shared name).
+  // What Photoshop's tool actually reads as at the Midtones range (the
+  // default, and the only one this app offers) is much closer to a plain
+  // photographic screen/multiply scale: burn multiplies every channel by
+  // the SAME (1-exposure) factor, which by construction can never change
+  // the R:G:B ratio — only brightness moves, never hue/saturation — and the
+  // change is directly proportional to exposure (25% exposure = roughly a
+  // 25% brightness cut per full-strength dab, not a disproportionate jump).
+  // Dodge mirrors it as a screen scale. The brush's own alpha (from
+  // stampBrush's shape/hardness falloff) still supplies the spatial
+  // coverage — how much of the dab touches each pixel — entirely separate
+  // from exposure, which is the strength of the tonal move itself.
   const dbSizeInput = document.getElementById('dbSize');
   const dbHardnessInput = document.getElementById('dbHardness');
   const dbExposureInput = document.getElementById('dbExposure');
@@ -3302,9 +3316,10 @@
     const lctx = layer.ctx;
     const region = lctx.getImageData(sx, sy, rw, rh);
     const data = region.data;
-    // See the comment above this section for why Cs comes from exposure
-    // (not the mask) and burn's Cs is inverted relative to dodge's.
-    const cs = isBurn ? (1-exposure) : exposure;
+    // Burn multiplies every channel by the same factor (hue/saturation-
+    // preserving, proportional to exposure); dodge is its screen-blend
+    // mirror. See the comment above this section for why — not the
+    // Color Dodge/Color Burn blend-mode formula.
     for(let i=0;i<data.length;i+=4){
       const as = maskData[i+3]/255;
       if(as<=0) continue;
@@ -3312,9 +3327,9 @@
         const cb = data[i+c]/255;
         let b;
         if(isBurn){
-          b = cb>=1 ? 1 : (cs<=0 ? 0 : 1-Math.min(1,(1-cb)/cs));
+          b = cb*(1-exposure);
         } else {
-          b = cb<=0 ? 0 : (cs>=1 ? 1 : Math.min(1, cb/(1-cs)));
+          b = 1-(1-cb)*(1-exposure);
         }
         data[i+c] = Math.round((as*b + (1-as)*cb)*255);
       }
