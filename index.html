@@ -931,7 +931,6 @@
       <div class="layer-list" id="layerList"></div>
     </div>
     <div class="layer-ctx-menu" id="layerCtxMenu" hidden>
-      <button type="button" class="layer-ctx-item" data-action="edit" id="layerCtxEdit" hidden>편집</button>
       <button type="button" class="layer-ctx-item" data-action="rename">이름 변경</button>
       <button type="button" class="layer-ctx-item" data-action="duplicate">복제</button>
       <button type="button" class="layer-ctx-item danger" data-action="delete">삭제</button>
@@ -1698,10 +1697,6 @@
   // inside the viewport so it can never render off-screen.
   function openLayerCtxMenuAt(layer, x, y, anchorRight){
     ctxMenuLayerId = layer.id;
-    // 편집 only makes sense for 선택색상/레벨/곡선 layers — this is now the
-    // only way to reopen their property editor, since tapping an
-    // already-active row opens this menu instead of the editor directly.
-    document.getElementById('layerCtxEdit').hidden = !layer.adjustmentType;
     layerCtxMenu.hidden = false;
     const rect = layerCtxMenu.getBoundingClientRect();
     let left = anchorRight ? x - rect.width : x;
@@ -1840,13 +1835,7 @@
       // reference here would silently no-op every array lookup that uses it.
       const layer = layers.find(l=>l.id===targetId);
       if(!layer) return;
-      if(action==='edit'){
-        if(layer.adjustmentType){
-          selectLayer(layer.id);
-          const menuId = ADJUSTMENT_MENU_ID[layer.adjustmentType];
-          if(menuId) openMenuFromLayerRow(menuId);
-        }
-      } else if(action==='rename'){
+      if(action==='rename'){
         const row = layerList.querySelector(`.layer-row[data-layer-id="${layer.id}"]`);
         if(row) startLayerRename(layer, row);
       } else if(action==='duplicate'){
