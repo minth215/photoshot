@@ -95,7 +95,11 @@
      commits a square result and the automatic pipeline takes over. */
   body.forced-crop .menu-cancel{display:none!important;}
   body.forced-crop #group-crop .ratio-btn:not([data-ratio="1:1"]){display:none;}
-  body.forced-crop #sideGroups > .group:not(#group-crop) > summary{pointer-events:none;opacity:.4;}
+  /* Blocks switching to a different menu: on mobile the tab bar is how you'd
+     do that; on desktop the same element IS the left tool bar now too, so
+     this one rule locks both layouts at once (summaries themselves are
+     either already unclickable on mobile or permanently hidden on desktop,
+     so there's no separate accordion-click path left to guard). */
   body.forced-crop .mobile-tabbar{display:none!important;}
   .toggle-btn.active{background:var(--accent-dim);border-color:var(--accent);color:#eafffb;}
   button{
@@ -463,14 +467,25 @@
   .layer-add-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-add-btn:hover{color:var(--accent);background:rgba(79,209,197,.12);}
   .layer-add-btn svg{width:17px;height:17px;}
+  /* Photoshop-style: blend mode + opacity live once at the top of the
+     stack, for whichever layer is currently selected, instead of a
+     repeated pair of controls inside every single row. */
+  .layer-panel-controls{
+    display:flex;align-items:center;gap:8px;
+    padding:8px;border-bottom:1px solid var(--line);
+  }
+  .layer-panel-controls select{flex:0 1 45%;font-size:11px;padding:4px 6px;height:26px;}
+  .layer-opacity-global-wrap{flex:1;display:flex;align-items:center;gap:6px;min-width:0;}
+  .layer-opacity-global-wrap input[type=range]{flex:1;height:14px;}
+  .layer-opacity-global-wrap span{font-family:var(--mono);font-size:10px;color:var(--text-dim);width:32px;text-align:right;flex-shrink:0;}
   /* flex:1 + min-height:0 is what actually lets overflow-y:auto kick in here —
      without it, a flex column's default min-height:auto keeps this item sized
      to its full content, so it overflows the panel's own max-height and gets
      clipped by the panel's overflow:hidden instead of scrolling. */
   .layer-list{overflow-y:auto;flex:1;min-height:0;padding:6px;display:flex;flex-direction:column;gap:4px;}
   .layer-row{
-    display:grid;grid-template-columns:28px 1fr auto auto;grid-template-rows:auto auto auto;
-    align-items:center;column-gap:8px;row-gap:4px;
+    display:grid;grid-template-columns:28px 1fr auto auto;
+    align-items:center;column-gap:8px;
     padding:6px 8px;border-radius:6px;border:1px solid transparent;
     background:var(--panel-2);
     /* none, not pan-y: the hold-to-drag gesture (attachLayerDrag) needs full
@@ -486,7 +501,7 @@
      renderLayerPanel's non-adjustment branch, which no longer fills black
      before drawing the layer). */
   .layer-thumb{
-    grid-row:1;grid-column:1;width:28px;height:28px;border-radius:4px;border:1px solid var(--line);
+    width:28px;height:28px;border-radius:4px;border:1px solid var(--line);
     background-image:
       linear-gradient(45deg,#ccc 25%,transparent 25%),
       linear-gradient(-45deg,#ccc 25%,transparent 25%),
@@ -496,16 +511,11 @@
     background-position:0 0,0 4px,4px -4px,-4px 0px;
     background-color:#fff;
   }
-  .layer-name{grid-row:1;grid-column:2;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .layer-icon-btn{grid-row:1;width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
+  .layer-name{font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .layer-icon-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:transparent;border-color:transparent;color:var(--text-dim);}
   .layer-icon-btn svg{width:16px;height:16px;}
   .layer-icon-btn.off{color:var(--text-dim);opacity:.4;}
   .layer-icon-btn.on{color:var(--accent);opacity:1;}
-  .layer-blend-row{grid-row:2;grid-column:1 / -1;}
-  .layer-blend-row select{padding:4px 6px;font-size:11px;height:26px;}
-  .layer-opacity-row{grid-row:3;grid-column:1 / -1;display:flex;align-items:center;gap:6px;}
-  .layer-opacity-row input[type=range]{flex:1;height:14px;}
-  .layer-opacity-row span{font-family:var(--mono);font-size:10px;color:var(--text-dim);width:30px;text-align:right;}
   input[type=color]{width:100%;height:34px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:5px;cursor:pointer;}
 
   aside{
@@ -653,12 +663,42 @@
      of the right sidebar instead of floating over the image, always visible. ---------- */
   @media (min-width: 861px){
     .layer-tab-btn{display:none!important;}
+
+    /* Left tool bar: the same .mobile-tabbar buttons used for the mobile
+       bottom bar, restyled as a vertical icon-only strip at the far left of
+       the screen — text labels hidden, the `title` attribute on each
+       button (added in HTML) supplies the native hover tooltip instead. It
+       stays visible even while a menu is open (unlike the mobile bar, which
+       hides during editing-mode — see the max-width block above) so a
+       different tool can be picked at any time, exactly like a real
+       Photoshop tool bar; the click handler auto-applies whatever menu was
+       open before switching. */
+    .mobile-tabbar{
+      display:flex;flex-direction:column;flex:0 0 auto;
+      width:56px;padding:10px 6px;gap:4px;align-items:center;
+      background:var(--panel);border-right:1px solid var(--line);
+      overflow-y:auto;
+    }
+    .mobile-tabbar button.tab-btn{width:40px;height:40px;padding:0;border-radius:8px;}
+    .mobile-tabbar button.tab-btn span{display:none;}
+
     /* The adjustment groups get their own scrolling region (flex:1) so the
        docked layer panel can be a plain fixed-size flex item pinned at the
        bottom — never overlapping the groups above it, unlike a sticky
-       element sharing one scroll container with them. */
+       element sharing one scroll container with them. Only the group
+       matching the currently-picked left tool bar icon is shown — same
+       .mobile-active mechanism the mobile layout uses for its own single
+       active panel — and each group's own summary/box chrome (border,
+       margin, +/− label) is dropped since the tool bar itself is what
+       picks it now. */
     aside#sidePanel{display:flex;flex-direction:column;overflow-y:hidden;padding:0;}
     #sideGroups{flex:1 1 auto;overflow-y:auto;min-height:0;padding:14px;}
+    #sideGroups > .group{display:none;}
+    #sideGroups > .group.mobile-active{
+      display:block;margin:0;border:none;border-radius:0;
+      background:transparent;overflow:visible;
+    }
+    #sideGroups > .group > summary{display:none;}
     .layer-panel.docked{
       position:static;flex:0 0 auto;
       margin:0;
@@ -724,6 +764,44 @@
 </div>
 
 <div class="layout">
+  <nav class="mobile-tabbar" id="mobileTabBar">
+    <button class="tab-btn" type="button" data-target="group-crop" title="크롭">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+      <span>크롭</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-resize" title="리사이즈">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      <span>리사이즈</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-effects" title="효과">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>
+      <span>효과</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-sc" title="선택색상">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20c1.4 0 2-1 2-2s-.5-1.4-.5-1.9.5-1.1 1.5-1.1H17a4 4 0 0 0 4-4c0-5.5-4.5-11-9-11z"/><circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg>
+      <span>선택색상</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-levels" title="레벨">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+      <span>레벨</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-curve" title="곡선">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M4 18c4-1 6-10 16-14"/></svg>
+      <span>곡선</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-draw" title="그리기">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      <span>그리기</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-selection" title="선택">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
+      <span>선택</span>
+    </button>
+    <button class="tab-btn" type="button" data-target="group-bgremove" title="배경 제거">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
+      <span>배경 제거</span>
+    </button>
+  </nav>
   <div class="stage-wrap" id="stageWrap">
     <div class="empty-state" id="emptyState">
       <div class="empty-state-glow"></div>
@@ -807,51 +885,19 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
       </div>
+      <div class="layer-panel-controls" id="layerPanelControls">
+        <select id="layerBlendGlobal" title="블렌드 모드" aria-label="블렌드 모드"></select>
+        <div class="layer-opacity-global-wrap">
+          <input type="range" id="layerOpacityGlobal" min="0" max="100" title="불투명도" aria-label="불투명도">
+          <span id="layerOpacityGlobalVal">100%</span>
+        </div>
+      </div>
       <div class="layer-list" id="layerList"></div>
     </div>
   </div>
 
   <aside id="sidePanel" style="display:none;">
    <div id="sideGroups">
-
-    <nav class="mobile-tabbar" id="mobileTabBar">
-      <button class="tab-btn" type="button" data-target="group-crop">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
-        <span>크롭</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-resize">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-        <span>리사이즈</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-effects">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8z"/></svg>
-        <span>효과</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-sc">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20c1.4 0 2-1 2-2s-.5-1.4-.5-1.9.5-1.1 1.5-1.1H17a4 4 0 0 0 4-4c0-5.5-4.5-11-9-11z"/><circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7" r="1.1" fill="currentColor" stroke="none"/><circle cx="16.5" cy="10.5" r="1.1" fill="currentColor" stroke="none"/></svg>
-        <span>선택색상</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-levels">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/></svg>
-        <span>레벨</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-curve">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4"/><path d="M4 20h16"/><path d="M4 18c4-1 6-10 16-14"/></svg>
-        <span>곡선</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-draw">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-        <span>그리기</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-selection">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="4 3"/></svg>
-        <span>선택</span>
-      </button>
-      <button class="tab-btn" type="button" data-target="group-bgremove">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l15 15"/><path d="M20 8v11a1 1 0 0 1-1 1H8"/><path d="M9.5 4.5A2 2 0 0 1 11 4h9a1 1 0 0 1 1 1v9a2 2 0 0 1-.5 1.3"/><path d="M4 8v11a1 1 0 0 0 1 1h11"/></svg>
-        <span>배경 제거</span>
-      </button>
-    </nav>
 
     <p class="hint locked-layer-warning" id="lockedLayerWarning" hidden>🔒 활성 레이어가 잠겨 있어 편집이 적용되지 않아요. 레이어 패널에서 잠금을 해제해주세요.</p>
 
@@ -1427,7 +1473,7 @@
     const HOLD_MS = 260, MOVE_CANCEL_PX = 8;
     let holdTimer = null, dragging = false, startY = 0, lastY = 0, scrolling = false, preDragSnapshot = null;
     function onDown(e){
-      if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
+      if(e.target.closest('.layer-icon-btn')) return;
       startY = e.clientY;
       lastY = e.clientY;
       scrolling = false;
@@ -1511,9 +1557,7 @@
         '<canvas class="layer-thumb"></canvas>' +
         '<span class="layer-name"></span>' +
         '<button type="button" class="layer-icon-btn layer-eye" title="표시/숨기기" aria-label="표시/숨기기"></button>' +
-        '<button type="button" class="layer-icon-btn layer-lock" title="잠금" aria-label="잠금"></button>' +
-        '<div class="layer-blend-row"><select class="layer-blend"></select></div>' +
-        '<div class="layer-opacity-row"><input type="range" class="layer-opacity" min="0" max="100"><span class="layer-opacity-val"></span></div>';
+        '<button type="button" class="layer-icon-btn layer-lock" title="잠금" aria-label="잠금"></button>';
       row.querySelector('.layer-name').textContent = layer.name;
       const eyeBtn = row.querySelector('.layer-eye');
       eyeBtn.innerHTML = svgEye(layer.visible);
@@ -1521,16 +1565,6 @@
       const lockBtn = row.querySelector('.layer-lock');
       lockBtn.innerHTML = svgLock(layer.locked);
       lockBtn.classList.toggle('on', layer.locked);
-      const blendSelect = row.querySelector('.layer-blend');
-      BLEND_MODES.forEach(([value,label])=>{
-        const opt = document.createElement('option');
-        opt.value = value; opt.textContent = label;
-        blendSelect.appendChild(opt);
-      });
-      blendSelect.value = layer.blendMode || 'normal';
-      const opacityInput = row.querySelector('.layer-opacity');
-      opacityInput.value = Math.round(layer.opacity*100);
-      row.querySelector('.layer-opacity-val').textContent = Math.round(layer.opacity*100)+'%';
       layerList.appendChild(row);
 
       const thumb = row.querySelector('.layer-thumb');
@@ -1557,7 +1591,7 @@
         // pointer-captured drag-reorder gesture (see attachLayerDrag's onUp)
         // — otherwise finishing a drag would select the dragged row itself.
         if(row._justDragged){ row._justDragged = false; return; }
-        if(e.target.closest('.layer-icon-btn,.layer-opacity-row,.layer-blend-row')) return;
+        if(e.target.closest('.layer-icon-btn')) return;
         // Picking a different layer while a 선택색상/레벨/곡선 session is open
         // acts like pressing 취소 first — prompting only if something was
         // actually changed — rather than leaving that session dangling open
@@ -1587,25 +1621,54 @@
         renderLayerPanel();
         updateLockedLayerWarning();
       });
-      blendSelect.addEventListener('click', e=> e.stopPropagation());
-      blendSelect.addEventListener('change', ()=>{
-        pushUndo(snapshotState());
-        layer.blendMode = blendSelect.value;
-        compositeLayers();
-      });
-      let opacityPreDrag = null;
-      opacityInput.addEventListener('pointerdown', e=>{ e.stopPropagation(); opacityPreDrag = snapshotState(); });
-      opacityInput.addEventListener('input', ()=>{
-        layer.opacity = parseInt(opacityInput.value,10)/100;
-        row.querySelector('.layer-opacity-val').textContent = opacityInput.value+'%';
-        compositeLayers();
-      });
-      opacityInput.addEventListener('change', ()=>{
-        if(opacityPreDrag){ pushUndo(opacityPreDrag); opacityPreDrag=null; }
-      });
       attachLayerDrag(row, layer);
     }
+    updateLayerPanelControls();
   }
+  // ---------- Layer panel controls (blend mode + opacity, Photoshop-style:
+  // one shared pair at the top of the stack, editing whichever layer is
+  // currently selected, instead of a repeated pair inside every row) ----------
+  const layerBlendGlobal = document.getElementById('layerBlendGlobal');
+  const layerOpacityGlobal = document.getElementById('layerOpacityGlobal');
+  const layerOpacityGlobalVal = document.getElementById('layerOpacityGlobalVal');
+  BLEND_MODES.forEach(([value,label])=>{
+    const opt = document.createElement('option');
+    opt.value = value; opt.textContent = label;
+    layerBlendGlobal.appendChild(opt);
+  });
+  // Reflects the active layer's current values — called from renderLayerPanel()
+  // so it always stays in sync however the active layer changed (selection,
+  // undo/redo, load, delete, ...) without each of those call sites needing to
+  // know about this control too.
+  function updateLayerPanelControls(){
+    const layer = layers.find(l=>l.id===activeLayerId);
+    const disabled = !layer;
+    layerBlendGlobal.disabled = disabled;
+    layerOpacityGlobal.disabled = disabled;
+    layerBlendGlobal.value = layer ? (layer.blendMode || 'normal') : 'normal';
+    const pct = layer ? Math.round(layer.opacity*100) : 100;
+    layerOpacityGlobal.value = pct;
+    layerOpacityGlobalVal.textContent = pct+'%';
+  }
+  layerBlendGlobal.addEventListener('change', ()=>{
+    const layer = layers.find(l=>l.id===activeLayerId);
+    if(!layer) return;
+    pushUndo(snapshotState());
+    layer.blendMode = layerBlendGlobal.value;
+    compositeLayers();
+  });
+  let layerOpacityPreDrag = null;
+  layerOpacityGlobal.addEventListener('pointerdown', ()=>{ layerOpacityPreDrag = snapshotState(); });
+  layerOpacityGlobal.addEventListener('input', ()=>{
+    const layer = layers.find(l=>l.id===activeLayerId);
+    if(!layer) return;
+    layer.opacity = parseInt(layerOpacityGlobal.value,10)/100;
+    layerOpacityGlobalVal.textContent = layerOpacityGlobal.value+'%';
+    compositeLayers();
+  });
+  layerOpacityGlobal.addEventListener('change', ()=>{
+    if(layerOpacityPreDrag){ pushUndo(layerOpacityPreDrag); layerOpacityPreDrag=null; }
+  });
   function toggleLayerPanel(){
     layerPanel.classList.toggle('collapsed');
     const isOpen = !layerPanel.classList.contains('collapsed');
@@ -2010,6 +2073,7 @@
     layerToggleBtn.classList.remove('active');
     layerToggleBtn.style.display='none';
     layerList.innerHTML='';
+    updateLayerPanelControls();
     viewScale=1; userZoomed=false; panOffsetX=0; panOffsetY=0;
     lassoPoints=[]; dragStart=null;
     shapeSelectPointerId=null; shapeSelectStart=null; shapeSelectCurrent=null;
@@ -4762,39 +4826,31 @@
   menuApplyBtn.addEventListener('click', ()=> applyActiveMenu());
   menuCancelBtn.addEventListener('click', ()=> cancelActiveMenu(true));
 
-  // ---------- Desktop accordion ----------
-  // Every group keeps the `open` attribute permanently (see note in the mobile CSS:
-  // browsers hide a closed <details>'s content with a UA !important rule that no
-  // author style can override, which broke the mobile tab panels). Collapse/expand
-  // is instead driven entirely by our own `.collapsed` class. Only one section is
-  // ever the "active" editing session at a time — expanding a different one while
-  // one is already open silently keeps (applies) whatever was pending in it first.
-  document.querySelectorAll('#sideGroups > .group > summary').forEach(summary=>{
-    summary.addEventListener('click', e=>{
-      e.preventDefault();
-      const group = summary.parentElement;
-      if(group.id===activeMenuId){
-        applyActiveMenu();
-        return;
-      }
-      if(activeMenuId) applyActiveMenu();
-      document.querySelectorAll('#sideGroups > .group').forEach(g=> g.classList.add('collapsed'));
-      group.classList.remove('collapsed');
-      enterMenu(group.id);
-    });
-  });
-
-  // ---------- Mobile bottom menu bar ----------
-  // The tab bar is only visible when no menu is active (see the editing-mode CSS),
-  // so a tab tap here always means "open a fresh menu" — closing always goes
-  // through the header's 적용/취소 first.
+  // ---------- Menu tab bar (mobile bottom bar / desktop left tool bar) ----------
+  // Same buttons, same handler, both layouts — only the CSS repositions and
+  // restyles them (see .mobile-tabbar rules). On mobile the bar is hidden
+  // the moment a menu opens (editing-mode CSS), so a tap here always means
+  // "open a fresh menu" and closing always goes through 적용/취소 first. On
+  // desktop the bar stays visible the whole time instead, Photoshop-tool-bar
+  // style, so clicking it needs the fuller logic every state can hit:
+  // clicking the already-open menu's icon applies/closes it (mirrors the old
+  // desktop accordion's "click again to close"), clicking a different one
+  // auto-applies whatever was open first, and either way the newly-picked
+  // group replaces whichever one was previously shown via .mobile-active.
   if(mobileTabBar){
     const tabButtons = mobileTabBar.querySelectorAll('.tab-btn');
     tabButtons.forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const targetEl = document.getElementById(btn.dataset.target);
         if(!targetEl) return;
+        if(btn.dataset.target===activeMenuId){
+          applyActiveMenu();
+          return;
+        }
+        if(activeMenuId) applyActiveMenu();
+        tabButtons.forEach(b=>b.classList.remove('active'));
         btn.classList.add('active');
+        sideGroups.querySelectorAll(':scope > .mobile-active').forEach(el=>el.classList.remove('mobile-active'));
         targetEl.classList.add('mobile-active');
         targetEl.classList.remove('collapsed');
         enterMenu(btn.dataset.target);
